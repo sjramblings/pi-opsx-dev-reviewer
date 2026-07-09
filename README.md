@@ -1,11 +1,14 @@
 # pi-opsx-dev-reviewer
 
-A portable kit that gives **pi** (pi.dev) a two-agent workflow — a **developer**
-subagent that implements and a separate **read-only reviewer** subagent that
-grades — and (optionally) **forces** OpenSpec's `/opsx:apply` to run through them
-instead of the single main agent editing files itself.
+A portable kit that turns **pi** (pi.dev) into a delegating, self-guarding software
+factory: a **design → implement → review → document** pipeline where a read-only main
+agent delegates to specialist subagents, structural guards fail closed, review evidence
+is produced by a neutral party, and every change **ratchets into durable back-pressure**
+so the harness learns over time (scoped learnings, a per-skill trust ledger, and standing
+goals re-verified forever).
 
-Copy this folder to any machine that has `pi`, run `./install.sh`, done.
+Install globally with `./install.sh`, or drop the whole harness into a repo with
+`./install.sh --here [repo]`.
 
 **Full visual reference:** open [`index.html`](index.html) for a single-page guide to every
 protection, agent, extension, and recipe, with usage — self-contained, opens straight from disk.
@@ -17,6 +20,7 @@ protection, agent, extension, and recipe, with usage — self-contained, opens s
 - [Install (global, per machine)](#install-global-per-machine)
 - [Use it — ad hoc (no OpenSpec)](#use-it--ad-hoc-no-openspec)
 - [Use it — force `/opsx:apply` (per OpenSpec project)](#use-it--force-opsxapply-per-openspec-project)
+- [Continual learning](#continual-learning-the-harness-gets-smarter-each-pass)
 - [Verify](#verify)
 - [Recommended environment](#recommended-environment)
 - [Docs gate](#docs-gate)
@@ -27,29 +31,36 @@ protection, agent, extension, and recipe, with usage — self-contained, opens s
 
 ```
 pi-opsx-dev-reviewer/
-├── install.sh                        # idempotent bootstrap (pi-side pieces)
+├── install.sh                        # bootstrap: ./install.sh (global) | --here [repo] (per-repo)
 ├── agents/
 │   ├── solution-architect.md         # settles design/contracts — edits design artifacts ONLY
 │   ├── developer.md                  # implementer — full tools, strong model
-│   ├── reviewer.md                   # adversarial code reviewer — READ-ONLY, different model
+│   ├── reviewer.md                   # adversarial code reviewer — READ-ONLY, different family
 │   ├── spec-reviewer.md              # adversarial SPEC red-team — cross-family, before code
 │   └── tech-writer.md                # documentation specialist — edits docs ONLY
-├── prompts/                          # /opsx-loop, /opsx-review, /opsx-retro templates
+├── prompts/                          # /opsx-loop · /opsx-review · /opsx-retro · /opsx-compost
+├── tools/                            # deterministic bun engines (+ tests): select-learnings,
+│                                     #   audit-learnings, trust, verify-goals, session-cost
+├── learnings/                        # scoped, glob-targeted rules distilled from review (the read-path)
+├── goals/                            # standing goals — finished work re-verified daily, forever
 ├── templates/                        # AGENTS.md + review-log.md starters for consuming repos
 ├── openspec/
 │   ├── apply-policy.config.yaml      # the delegation hint to merge into a project's config.yaml
 │   └── schemas/dev-reviewer/         # custom schema: delegation apply + review-report + docs artifacts
 ├── docs/decisions/                   # MADR architecture decision records
-├── justfile                          # `docs-lint` (graceful-skip) + `docs-lint-setup`
-├── .markdownlint-cli2.jsonc · .vale.ini · styles/ · .lycheeignore · cspell.json   # docs gate config
+├── justfile · justfile.opsx          # recipe suite; the shared justfile.opsx is imported per-repo
+├── index.html                        # single-page visual guide to the whole harness
 ├── HARDENING_PLAN.md · SHAKEDOWN.md · docs/operating-risks.html   # risk map + hardening build
 └── extensions/
     ├── force-delegate/index.ts       # ENFORCER — read-only main agent (write/edit blocked, bash allowlisted)
     ├── architect-scope/index.ts      # fail-closed path-gate: architect writes design artifacts only
     ├── harness-selftest/index.ts     # session-start canary — loud HALT if force-delegate did not load
     ├── developer-guard/index.ts      # damage-control on write-capable subagents (blocks catastrophic bash)
-    └── branch-guard/index.ts         # PR-flow enforcer — blocks commit/push/force-push to main/master
+    ├── branch-guard/index.ts         # PR-flow enforcer — blocks commit/push/force-push to main/master
+    └── opsx-reminder/index.ts        # session-start nudge — the one pending lifecycle action
 ```
+
+(`memory/` — the trust + goal ledgers — is generated at runtime and gitignored, never committed.)
 
 ## How it works
 
@@ -60,8 +71,10 @@ pi-opsx-dev-reviewer/
   `~/.pi/agent/agents/` define the two roles.
 - **Read-only is real, not prompted.** `reviewer.md` sets `tools: read,find,ls,grep`
   — dropping `edit`/`write`/`bash` means the reviewer *physically cannot* change files.
-- **Independent judgment = different model family.** developer runs on Claude,
-  reviewer on GPT-5.5. Keep them cross-family.
+- **Independent judgment = different model family.** The reviewer's value is *not*
+  sharing the developer's blind spots — keep them cross-family (e.g. developer on
+  `openai-codex/gpt-5.5`, reviewer on `anthropic/claude-opus-4-8`). The shipped default
+  pins an all-OpenAI config for reachability; see the cross-family caveat below.
 - **Forcing apply is a pi-layer trick, not an OpenSpec feature.** OpenSpec's apply
   is single-agent by default and has no native delegation. The `force-delegate`
   extension blocks the main agent's `write`/`edit`/`bash` tool calls, so the only
@@ -117,16 +130,17 @@ pi -p "Implement <X> with the developer agent, then have the reviewer agent
    the agent *how* to delegate. (Note: in the default `spec-driven` schema, `context`
    is injected at artifact creation and `rules` are per-artifact — neither is
    guaranteed to reach the apply step, which is exactly why step 2 exists.)
-2. **Force** (the enforcers): copy the extensions into the project so they load for
-   that repo's sessions:
+2. **Force** (the enforcers): install the project-scoped pieces into the repo:
    ```bash
-   mkdir -p <repo>/.pi/extensions
-   cp -r extensions/force-delegate  <repo>/.pi/extensions/
-   cp -r extensions/architect-scope <repo>/.pi/extensions/
-   cp -r extensions/harness-selftest  <repo>/.pi/extensions/
-   cp -r extensions/developer-guard   <repo>/.pi/extensions/
-   cp -r extensions/branch-guard      <repo>/.pi/extensions/
+   /path/to/pi-opsx-dev-reviewer/install.sh --here .
    ```
+   This copies **all** extensions into `<repo>/.pi/extensions/`, the `tools/`, and the
+   `dev-reviewer` schema, scaffolds `AGENTS.md` + `learnings/` + `goals/`, and wires the
+   recipe `justfile.opsx` via an `import` — **non-destructively** (`cp -n`; never clobbers
+   your data; skips the schema if the repo already uses a different one). Then it runs
+   `just check-extensions` to prove the guards load clean. (Manual alternative:
+   `cp -r extensions/* <repo>/.pi/extensions/`.)
+
    The `harness-selftest` canary prints a loud `HARNESS UNGUARDED` banner at startup if
    `force-delegate` failed to load, so a silent enforcer failure can never pass unnoticed.
    `developer-guard` blocks catastrophic bash (recursive-force `rm`, force-push, `sudo`,
@@ -147,6 +161,29 @@ schema (`openspec/schemas/dev-reviewer/`), which bakes the delegation protocol i
 `openspec/config.yaml`). `openspec update` won't overwrite a project schema (it *does*
 regenerate — and would clobber — the generated `.pi/prompts/opsx-apply.md`, so never
 hand-edit that file).
+
+## Continual learning (the harness gets smarter each pass)
+
+Every change ratchets into durable back-pressure so the next one is cheaper:
+
+- **Scoped learnings** (`learnings/`) — `/opsx-retro` distils recurring review findings into
+  glob-scoped rules with provenance and a `draft → active` promotion gate. At BRIEF,
+  `just learnings-preview` runs the changed files through `tools/select-learnings.ts` and hands
+  the developer only the learnings that match *those* paths — the scoped tier `AGENTS.md` can't
+  be. `just check-learnings` (canary) and `just learnings-audit` (provenance) guard it.
+- **Per-skill trust ledger** (`just trust`) — every completed task logs a pass/fail; autonomy
+  graduates per skill: `auto` (≥20 runs, ≥95%), `watch` (<10 runs or <90%), `queue` between.
+- **Standing goals** (`goals/`, `just goals`) — a finished change graduates into a `predicate:`
+  re-verified daily; a regression flips it `VIOLATED` and fails loud. Nothing that passed once
+  goes unwatched.
+- **Weekly compost** (`/opsx-compost`) — reads the week's failures across changes, trust, and
+  goals and proposes at most three new laws for your sign-off.
+- **Session cost rollup** (`just session-cost <session.jsonl>`) — totals a pi session's cost per
+  model (which `pi --export` does not), and flags subagent calls whose cost is TUI-only.
+
+The exact command sequence by cadence (inner loop → ratchet → daily → weekly) is in
+[`index.html`](index.html) under "The continual-learning lifecycle". Routing rule: global
+invariants live in `AGENTS.md`, path-scoped rules in `learnings/`, verdicts in `review-log.md`.
 
 ## Verify
 

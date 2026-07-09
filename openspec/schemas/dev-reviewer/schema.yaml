@@ -83,8 +83,11 @@ artifacts:
       afterthought. Owned by the `tech-writer` subagent. It must cover every
       user-visible change in this change folder, structured by Diátaxis (one mode per
       page), styled to pass the repo docs-lint gate, and verified against the shipped
-      code (not the proposal's intent). A change with user-facing surface is not done
-      until this artifact exists and the docs gate is clean.
+      code (not the proposal's intent). This explicitly includes the repo's root-level
+      entry docs — README.md and index.html — whenever their user-facing surface changed:
+      a feature that ships without README.md and index.html reflecting it is an INCOMPLETE
+      change and a BLOCK finding. A change with user-facing surface is not done until this
+      artifact exists, the entry docs match what shipped, and the docs gate is clean.
     requires:
       - tasks
 apply:

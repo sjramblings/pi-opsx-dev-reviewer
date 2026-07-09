@@ -11,6 +11,8 @@ like code.
 
 ## Rules
 
+- Keep README.md and index.html current with shipped user-facing features; a stale entry doc is a BLOCK finding (enforced by the dev-reviewer `docs` artifact).
+
 <!-- One line per rule. Example shape: -->
 <!-- - Validate every boundary response shape before trusting it (caught 3× in review). -->
 <!-- - No empty catch blocks; a swallowed error is a BLOCK finding. -->
