@@ -1,0 +1,108 @@
+name: dev-reviewer
+version: 1
+description: >
+  spec-driven workflow with the dev-reviewer contract baked in — apply mandates
+  developer/reviewer delegation, a review-report captures every verdict, and a
+  docs artifact makes documentation a condition of a complete change.
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Initial proposal document outlining the change
+    template: proposal.md
+    instruction: >
+      Create the proposal document that establishes WHY this change is needed.
+
+      Sections: **Why** (1-2 sentences on the problem), **What Changes** (bullet
+      list; mark breaking changes **BREAKING**), **Capabilities** (which specs are
+      created/modified, kebab-case), **Impact** (affected code/APIs/deps).
+
+      The Capabilities section is the contract between proposal and specs — research
+      existing specs first. Keep it concise; the "why", not the "how".
+    requires: []
+  - id: specs
+    generates: specs/**/*.md
+    description: Detailed specifications for the change
+    template: spec.md
+    instruction: >
+      Create one spec file per capability from the proposal (specs/<capability>/spec.md).
+
+      Use delta headers (## ADDED/MODIFIED/REMOVED/RENAMED Requirements). Each
+      requirement: `### Requirement: <name>` with SHALL/MUST. Each scenario: exactly
+      four hashtags `#### Scenario: <name>` in WHEN/THEN form. Every requirement needs
+      at least one scenario. Specs are testable — each scenario is a potential test.
+    requires:
+      - proposal
+  - id: design
+    generates: design.md
+    description: Technical design — settled by the solution-architect subagent
+    template: design.md
+    instruction: >
+      Create the design document that explains HOW to implement the change. Create only
+      if the change is cross-cutting, adds a dependency, changes the data model, or has
+      security/performance/migration complexity.
+
+      Sections: Context · Goals / Non-Goals · Decisions (with rationale + alternatives) ·
+      Risks / Trade-offs ([Risk] → Mitigation) · Migration Plan · Open Questions.
+
+      Delegation: this artifact is owned by the `solution-architect` subagent, which
+      edits design artifacts ONLY. After the architect settles it, a cross-family `spec-reviewer`
+      subagent red-teams the spec for ambiguity/missing-cases/untestable requirements
+      BEFORE any code; block on P0/P1 spec defects. Record each decision in MADR form under
+      docs/decisions/ as well, so rationale survives outside the change folder.
+    requires:
+      - proposal
+  - id: tasks
+    generates: tasks.md
+    description: Implementation checklist with trackable tasks
+    template: tasks.md
+    instruction: >
+      Break the work into checkbox tasks. Group under ## numbered headings; each task is
+      `- [ ] X.Y Task description`, small enough for one session, ordered by dependency.
+      The apply phase parses `- [ ]` to track progress — tasks not using it aren't tracked.
+    requires:
+      - specs
+      - design
+  - id: review-report
+    generates: review-log.md
+    description: Durable record of every reviewer verdict for this change (the ledger)
+    template: review-log.md
+    instruction: >
+      This artifact is the review ledger. During apply, the developer appends the
+      reviewer's verdict block verbatim here BEFORE ticking each task — one entry per
+      task, newest last. It is the evidence the archive-time retro (/opsx-retro) ratchets
+      into durable rules. A change is not complete until every implemented task has a
+      corresponding verdict entry here.
+    requires:
+      - tasks
+  - id: docs
+    generates: docs/**/*.md
+    description: Documentation delta — written by the tech-writer subagent
+    template: docs.md
+    instruction: >
+      This artifact makes good documentation a condition of a complete change, not an
+      afterthought. Owned by the `tech-writer` subagent. It must cover every
+      user-visible change in this change folder, structured by Diátaxis (one mode per
+      page), styled to pass the repo docs-lint gate, and verified against the shipped
+      code (not the proposal's intent). A change with user-facing surface is not done
+      until this artifact exists and the docs gate is clean.
+    requires:
+      - tasks
+apply:
+  requires:
+    - tasks
+  tracks: tasks.md
+  instruction: |
+    Do NOT implement tasks yourself — delegate. For each pending task in tasks.md:
+      0. BRIEF: read AGENTS.md (repo root) and review-log.md; fold recurring pitfalls
+         into the developer's brief so they are avoided, not re-caught.
+      1. Delegate implementation to the `developer` subagent (task text + change folder path).
+      2. Send the result to the `reviewer` subagent: pass the raw diff and the developer's
+         raw command output as evidence; quarantine the developer's narrative as untrusted.
+      3. LEDGER: the developer appends the reviewer's verdict verbatim to review-log.md
+         before ticking the task.
+      4. Only VERDICT: PASS (no P0/P1) completes the task; the developer ticks it [x].
+      5. On BLOCK, hand findings back to the developer and repeat.
+    After the last task: delegate the docs artifact to the `tech-writer` subagent, then run
+    `just archive-check <change>` (OpenSpec does not itself gate archive on the review
+    ledger or docs — this check does) and `/opsx-retro` to ratchet recurring findings
+    before archive. Work tasks sequentially.

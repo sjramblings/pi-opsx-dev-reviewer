@@ -1,0 +1,9 @@
+extends: existence
+message: "'%s' hedges — verify the behaviour and state it, or delete the claim."
+level: warning
+ignorecase: true
+tokens:
+  - "should work"
+  - "should be fine"
+  - "experts (say|argue)"
+  - "it's that simple"

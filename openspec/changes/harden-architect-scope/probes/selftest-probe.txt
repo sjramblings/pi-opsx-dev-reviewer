@@ -1,0 +1,4 @@
+command: just check-extensions
+exit: 0
+--- output ---
+check-extensions: clean -- no pi load-breakers

@@ -1,0 +1,253 @@
+# pi-opsx-dev-reviewer — shared recipes. Imported by the kit justfile AND by any repo
+# that ran install.sh --here. Deliberately has NO 'default' recipe, so importing it
+# never collides with a host justfile's own default (which broke a real host justfile).
+
+# Lint all Markdown. Skips any tool that isn't installed (prints a notice) so the
+# gate runs anywhere; `just docs-lint-setup` installs the full set.
+docs-lint:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    rc=0; skipped=0
+    run() { # run <tool-name> <command...>
+        local name="$1"; shift
+        if command -v "$1" >/dev/null 2>&1; then
+            echo "── $name ──"
+            "$@" || rc=1
+        else
+            echo "── $name: not installed, skipping (run 'just docs-lint-setup') ──"
+            skipped=$((skipped + 1))
+        fi
+    }
+    run markdownlint markdownlint-cli2 "**/*.md"
+    run vale          vale .
+    run lychee        lychee --no-progress --cache '**/*.md'
+    run cspell        cspell "**/*.md" --no-progress
+    if [ "$rc" -ne 0 ]; then
+        echo "docs-lint: FAIL"
+    elif [ "$skipped" -gt 0 ]; then
+        echo "docs-lint: PARTIAL — $skipped tool(s) not installed, docs NOT fully checked (run 'just docs-lint-setup')"
+    else
+        echo "docs-lint: clean (all tools ran)"
+    fi
+    exit "$rc"
+
+# Hard presence gate before archiving a change. OpenSpec 1.4.1 does NOT block archive on
+# a missing review-report/docs artifact, so this check enforces it. Never skips; exits
+# non-zero if the review ledger is absent or empty. Run before `openspec archive`.
+archive-check change:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="openspec/changes/{{change}}"
+    if [ ! -d "$dir" ]; then echo "archive-check: no change folder $dir" >&2; exit 1; fi
+    log="$dir/review-log.md"
+    # A real ledger has at least one recorded verdict, not just the template comment.
+    if [ ! -f "$log" ] || ! grep -qE '^VERDICT:' "$log"; then
+        echo "archive-check: FAIL — $log is missing or has no VERDICT entry." >&2
+        echo "  Every implemented task must have its reviewer verdict recorded before archive." >&2
+        exit 1
+    fi
+    echo "archive-check: review ledger present ($(grep -cE '^VERDICT:' "$log") verdict(s))."
+    # Verify every probe attestation: re-hash the recorded transcript and compare. A hand-edited
+    # output (tampered evidence) no longer matches its recorded sha256 and fails the archive.
+    fail=0
+    while IFS= read -r rel; do
+        [ -z "$rel" ] && continue
+        tf="$dir/$rel"
+        want=$(awk -v f="file: $rel" '$0==f{grab=1} grab&&/^sha256:/{print $2; exit}' "$log")
+        if [ ! -f "$tf" ]; then echo "  attestation FAIL: missing $tf" >&2; fail=1; continue; fi
+        got=$(shasum -a 256 "$tf" | awk '{print $1}')
+        if [ "$got" != "$want" ]; then echo "  attestation FAIL: $rel tampered (sha256 mismatch)" >&2; fail=1
+        else echo "  attestation ok: $rel"; fi
+    done < <(grep -E '^file: probes/' "$log" | sed 's/^file: //' || true)
+    if [ "$fail" -ne 0 ]; then echo "archive-check: FAIL -- attestation mismatch" >&2; exit 1; fi
+    echo "  Reminder: confirm the docs delta for this change is written and 'just docs-lint' is clean."
+
+# Guard against pi extension LOAD-BREAKERS. pi 0.79.9 loads extensions with a fragile
+# tokenizer that fails the whole file with "Unterminated string constant" and SILENTLY
+# disables it on: regex literals, raw backticks, or apostrophes (even in comments/strings).
+# bun build, jiti, and unit tests all miss this. This check never skips; run it in CI.
+check-extensions:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    shopt -s nullglob
+    # Kit-dev layout (extensions/) AND installed-project layout (.pi/extensions/).
+    files=(extensions/*/index.ts .pi/extensions/*/index.ts)
+    if [ ${#files[@]} -eq 0 ]; then echo "check-extensions: no extensions found (nothing to check)"; exit 0; fi
+    rc=0
+    for f in "${files[@]}"; do
+        if grep -q '`' "$f"; then echo "LOAD-BREAKER: raw backtick in $f" >&2; rc=1; fi
+        if grep -q "'" "$f"; then echo "LOAD-BREAKER: apostrophe in $f (use none; even in comments/strings)" >&2; rc=1; fi
+        # Regex literals only: assignment to /re/ (needs a space: `= /`) or a regex method
+        # called with a literal (`.split(/`, `.test(/`, ...). Excludes `=/dev/` in strings.
+        if grep -nE '=[[:space:]]+/[^/*]|\.(split|test|match|replace|exec|search)\(/' "$f" >/dev/null; then
+            echo "LOAD-BREAKER: possible regex literal in $f -- use new RegExp(...) instead:" >&2
+            grep -nE '=[[:space:]]+/[^/*]|\.(split|test|match|replace|exec|search)\(/' "$f" | sed 's/^/    /' >&2
+            rc=1
+        fi
+    done
+    if [ "$rc" -eq 0 ]; then echo "check-extensions: clean -- no pi load-breakers"; else echo "check-extensions: FAIL" >&2; fi
+    exit "$rc"
+
+# Install the docs-lint toolchain. Homebrew for vale + lychee, npm for the JS tools.
+docs-lint-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if command -v brew >/dev/null 2>&1; then
+        brew install vale lychee
+    else
+        echo "Homebrew not found — install vale + lychee manually: https://vale.sh, https://lychee.cli.rs"
+    fi
+    npm install -g markdownlint-cli2 cspell
+    vale sync   # pulls the Google + write-good packages named in .vale.ini
+    echo "docs-lint toolchain ready."
+
+# --- Phase 2: make review real (oracle + deterministic gate) ---
+
+# Deterministic pre-review gate. Runs tsc/eslint/semgrep with graceful-skip so the LLM
+# reviewer only judges what a linter cannot. Skipped tools print a notice (not a pass).
+verify-gate:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    rc=0; skipped=0
+    run() { local name="$1"; shift
+        if command -v "$1" >/dev/null 2>&1; then echo "-- $name --"; "$@" || rc=1
+        else echo "-- $name: not installed, skipping --"; skipped=$((skipped+1)); fi; }
+    if [ -f tsconfig.json ]; then run tsc tsc --noEmit; else echo "-- tsc: no tsconfig.json, skipping --"; skipped=$((skipped+1)); fi
+    run eslint eslint .
+    run semgrep semgrep --error --quiet --config auto .
+    if [ "$rc" -ne 0 ]; then echo "verify-gate: FAIL"
+    elif [ "$skipped" -gt 0 ]; then echo "verify-gate: PARTIAL -- $skipped tool(s) not installed, NOT fully checked"
+    else echo "verify-gate: clean (all tools ran)"; fi
+    exit "$rc"
+
+# Pre-committed probe convention: every task line in a change tasks.md must be followed by
+# a "probe:" line (the frozen acceptance check, written BEFORE apply). Fails if any lacks one.
+probe-check change:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    f="openspec/changes/{{change}}/tasks.md"
+    if [ ! -f "$f" ]; then echo "probe-check: no tasks.md for {{change}}" >&2; exit 1; fi
+    awk '
+      /^- \[[ x]\]/ { if (pending) { print "  task missing probe: " last; bad++ } pending=1; last=$0; next }
+      /^[[:space:]]*probe:/ { pending=0 }
+      END { if (pending) { print "  task missing probe: " last; bad++ } exit (bad>0?1:0) }
+    ' "$f" && { echo "probe-check: every task has a probe"; } || { echo "probe-check: FAIL -- add a probe: line under each task" >&2; exit 1; }
+
+# Neutral executor + attestation. Runs a frozen probe command in a clean context, writes the
+# transcript to probes/<id>.txt and records its sha256 in review-log.md. Neither the developer
+# nor the reviewer produces this evidence; archive-check re-hashes it, so tampering is caught.
+run-probe change probeid *cmd:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    dir="openspec/changes/{{change}}"; log="$dir/review-log.md"
+    mkdir -p "$dir/probes"
+    out=$(bash -c '{{cmd}}' 2>&1); code=$?
+    tf="$dir/probes/{{probeid}}.txt"
+    { echo "command: {{cmd}}"; echo "exit: $code"; echo "--- output ---"; echo "$out"; } > "$tf"
+    hash=$(shasum -a 256 "$tf" | awk '{print $1}')
+    { echo ""; echo "## PROBE ATTESTATION -- {{probeid}}"; echo "file: probes/{{probeid}}.txt"; echo "exit: $code"; echo "sha256: $hash"; } >> "$log"
+    echo "attested {{probeid}}: exit=$code sha256=$hash -> $tf"
+
+# --- Phase 3: efficient & upstream ---
+
+# Brief-completeness gate. A delegation brief (Task string, saved to a file) must name the
+# files, the frozen probe, the out-of-scope surface, and the spec path before the expensive
+# developer is spawned. Shift-left on the most leveraged, least-gated input.
+brief-check file:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    f="{{file}}"
+    if [ ! -f "$f" ]; then echo "brief-check: no such brief file $f" >&2; exit 1; fi
+    miss=0
+    for need in "files:" "probe:" "out-of-scope:" "spec:"; do
+        grep -qiE "^[[:space:]]*$need" "$f" || { echo "  brief missing: $need" >&2; miss=1; }
+    done
+    if [ "$miss" -ne 0 ]; then echo "brief-check: FAIL -- an underspecified brief yields a confident wrong build" >&2; exit 1; fi
+    echo "brief-check: brief is self-contained"
+
+# --- Phase 4: scoped learning loop ---
+
+# Retrieval read-path. Print the ACTIVE learnings whose scope glob matches a file changed
+# since <ref>. /opsx-loop calls this at BRIEF so the developer gets only the relevant
+# past learnings for THESE files -- the scoped tier AGENTS.md cannot be. Cold-start clean.
+learnings-preview ref="HEAD":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    git diff --name-only {{ref}} | bun tools/select-learnings.ts
+
+# Canary. Proves the retrieval path is LIVE and correct with a hermetic fixture: a matching
+# diff must select the seeded learning, a non-matching diff must not. Fails loud the way
+# harness-selftest catches a silently-disabled extension. Never skips; run it in CI.
+check-learnings:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    printf '%s\n' '---' 'schema_version: 1' 'id: LRN-CANARY' 'type: bug-class' \
+        'scope: ["canary/**"]' 'status: active' 'severity: high' 'summary: canary' \
+        'source:' '  change: check-learnings' '  commit: "0000000"' 'created: 2026-01-01' \
+        '---' > "$tmp/LRN-CANARY.md"
+    hit=$(printf 'canary/deep/x.ts\n' | bun tools/select-learnings.ts --dir "$tmp")
+    miss=$(printf 'other/x.ts\n' | bun tools/select-learnings.ts --dir "$tmp")
+    if ! printf '%s' "$hit" | grep -q 'LRN-CANARY'; then
+        echo "check-learnings: FAIL -- selector did not select the canary on a matching diff; retrieval is broken." >&2
+        exit 1
+    fi
+    if printf '%s' "$miss" | grep -q 'LRN-CANARY'; then
+        echo "check-learnings: FAIL -- selector selected the canary on a NON-matching diff (false positive)." >&2
+        exit 1
+    fi
+    echo "check-learnings: retrieval path live (match hit, non-match clean)."
+
+# Provenance + schema gate. Every learning must carry the required frontmatter; every
+# ACTIVE learning must point at a change folder that resolves (live or archived) and a
+# commit sha. A dangling or malformed learning fails the gate. Never skips.
+learnings-audit:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    bun tools/audit-learnings.ts
+
+# Lifecycle helper: where is <change>, and what do you run next? Deterministic, read-only —
+# reads tasks.md + review-log.md so you never have to remember the retro/archive step.
+next change:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    dir="openspec/changes/{{change}}"
+    if [ ! -d "$dir" ]; then
+        if [ -d "openspec/changes/archive/{{change}}" ]; then
+            echo "{{change}}: archived — lifecycle complete."; exit 0
+        fi
+        echo "next: no change folder openspec/changes/{{change}}" >&2; exit 1
+    fi
+    tasks="$dir/tasks.md"
+    total=$(grep -cE '^- \[[ xX]\] ' "$tasks" 2>/dev/null || true); total=${total:-0}
+    done=$(grep -cE '^- \[[xX]\] ' "$tasks" 2>/dev/null || true);  done=${done:-0}
+    verdicts=$(grep -cE '^VERDICT:' "$dir/review-log.md" 2>/dev/null || true); verdicts=${verdicts:-0}
+    echo "change {{change}}: $done/$total tasks done, $verdicts verdict(s) in the ledger."
+    if [ "$total" -eq 0 ]; then
+        echo "next: no tasks yet — write proposal → specs → tasks (each task needs a probe: line)."
+    elif [ "$done" -lt "$total" ]; then
+        echo "next: run  /opsx-loop {{change}}  to implement the remaining $((total - done)) task(s)."
+    else
+        echo "next: all tasks done — run  /opsx-retro {{change}} , then  just archive-check {{change}} , then  openspec archive {{change}} ."
+    fi
+
+# Per-skill autonomy trust ledger. `just trust` renders the table (runs/pass-rate/tier);
+# `just trust-log <skill> <pass|fail>` records a result. Tiers: auto (>=20 runs, >=95%),
+# watch (<10 runs or <90%), queue (between). Demotion below 90% prints an ALERT to stderr.
+trust:
+    @bun tools/trust.ts render
+
+trust-log skill result:
+    @bun tools/trust.ts log {{skill}} {{result}}
+
+# Re-verify every standing goal (goals/*.md predicates). Flips satisfied<->VIOLATED in each
+# file, appends to memory/goal-ledger.tsv, exits non-zero if anything regressed. Run daily.
+goals:
+    @bun tools/verify-goals.ts
+
+# Roll up a pi session's cost per model + grand total (pi --export shows no total). Reports
+# subagent calls, whose cost is NOT persisted (subagents run --no-session; TUI-only). Pass
+# --html to emit a cost-summary fragment to sit beside the exported session HTML.
+session-cost session *flags:
+    @bun tools/session-cost.ts {{session}} {{flags}}

@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# APPLY DELEGATION POLICY — merge this into your project's openspec/config.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# This is a HINT, not the enforcer. In the default `spec-driven` schema, `context`
+# is injected when the AI *creates artifacts* and `rules` are keyed to artifact
+# types (proposal/design/tasks) — neither is guaranteed to govern the *apply*
+# (implementation) step. So this text tells the agent HOW to delegate; the
+# force-delegate extension (extensions/force-delegate/) is what makes it MANDATORY.
+#
+# HOW TO APPLY: open your <repo>/openspec/config.yaml and paste the block below
+# at the END of the existing `context: |` block (keep the same indentation).
+
+  # ── APPLY DELEGATION PROTOCOL ──
+  # If you ever see a 'HARNESS UNGUARDED' banner at startup, force-delegate did not
+  # load -- STOP and fix the extension before doing any work; delegation is not enforced.
+  # Do NOT implement tasks yourself. For each incomplete task in a change's tasks.md:
+  #   0. BRIEF: before the first task, read `AGENTS.md` (repo root, if present) and
+  #      `openspec/changes/<change>/review-log.md` (if present). Fold recurring
+  #      pitfalls into the developer's brief so they're avoided, not re-caught.
+  #   1. Call the `subagent` tool with agent="developer" and a task string that
+  #      includes the task text AND the path to the change folder.
+  #   1b. GATE: run `just verify-gate` (deterministic tsc/eslint/semgrep) and
+  #       `just run-probe <change> <task> <probe-cmd>` to attest the frozen probe
+  #       BEFORE review -- the reviewer judges what the deterministic gate cannot, and
+  #       consumes attested evidence it did not produce.
+  #   2. When the developer returns, call `subagent` with agent="reviewer". Pass the
+  #      raw diff and the developer's raw VERIFIED output as evidence; quarantine the
+  #      developer's narrative as untrusted claims (see reviewer.md).
+  #   3. LEDGER: the developer appends the reviewer's verdict block verbatim to
+  #      `openspec/changes/<change>/review-log.md` BEFORE ticking the task. This is
+  #      the durable record the archive-time retro (/opsx-retro) ratchets into rules.
+  #   4. Only if the reviewer returns VERDICT: PASS (no P0/P1) is the task done.
+  #      The developer subagent marks its own task line [x] in tasks.md.
+  #   5. If BLOCK, hand the reviewer's findings back to the developer and repeat.
+  # Work tasks sequentially; keep each delegation scoped to one task.
+
+
+# OPTIONAL — the OpenSpec-native (clobber-proof) alternative to the extension:
+# define a custom schema that redefines the `apply` template body under
+#   openspec/schemas/<name>/templates/   (see: openspec docs → customization).
+# That bakes the delegation instruction into the apply command itself, and
+# `openspec update` won't overwrite it (unlike the generated .pi/prompts/opsx-apply.md).
+
+  # ── UPSTREAM + RISK-TIERED REVIEW (Phase 3) ──
+  # BRIEF GATE: before spawning the developer, write the Task brief to a file and run
+  #   `just brief-check <file>` -- it must name files:, probe:, out-of-scope:, spec:.
+  #   An underspecified brief yields a confident wrong build; bounce it back first.
+  # SPEC RED-TEAM: at design-settle, before any code, delegate to the `spec-reviewer`
+  #   subagent (a different model family than the architect). BLOCK on any P0/P1 spec
+  #   defect -- it is cheaper to fix now than after N tasks amplify it.
+  # RISK TIER: tag high-consequence tasks `risk:high` (auth/money/migration/delete/
+  #   concurrency). risk:high tasks get the FULL review; others get a light review AFTER
+  #   `just verify-gate` passes -- concentrate expensive scrutiny where blindness bites.
+  # TWO-FAMILY QUORUM (risk:high): run the reviewer twice via the subagent `model`
+  #   override -- once openai-codex, once anthropic -- and require BOTH to PASS. Keeps the
+  #   developer on OpenAI while decorrelating reviewer blind spots.

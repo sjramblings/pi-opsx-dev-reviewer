@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operating Risks — pi-opsx-dev-reviewer</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --surface: #ffffff;
+    --ink: #1c1d1f;
+    --muted: #5c5f66;
+    --line: #e6e6e3;
+    --accent: #b45309;
+    --rigor: #b45309;
+    --silent: #b91c1c;
+    --ops: #1d4ed8;
+    --leverage: #6d28d9;
+    --meta: #4b5563;
+    --fact-bg: #e7f2ea;
+    --fact-ink: #1f6f43;
+    --assess-bg: #eef0f2;
+    --assess-ink: #475066;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --surface: #1f2124;
+      --ink: #e9e9e7;
+      --muted: #a2a6ad;
+      --line: #33363b;
+      --accent: #fbbf24;
+      --rigor: #fbbf24;
+      --silent: #f87171;
+      --ops: #60a5fa;
+      --leverage: #c4b5fd;
+      --meta: #9ca3af;
+      --fact-bg: #16342440;
+      --fact-ink: #6ee7a8;
+      --assess-bg: #2a2e35;
+      --assess-ink: #aab2c2;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fbfbfa; --surface: #fff; --ink: #1c1d1f; --muted: #5c5f66; --line: #e6e6e3;
+    --accent: #b45309; --rigor: #b45309; --silent: #b91c1c; --ops: #1d4ed8;
+    --leverage: #6d28d9; --meta: #4b5563; --fact-bg: #e7f2ea; --fact-ink: #1f6f43;
+    --assess-bg: #eef0f2; --assess-ink: #475066;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a; --surface: #1f2124; --ink: #e9e9e7; --muted: #a2a6ad; --line: #33363b;
+    --accent: #fbbf24; --rigor: #fbbf24; --silent: #f87171; --ops: #60a5fa;
+    --leverage: #c4b5fd; --meta: #9ca3af; --fact-bg: #16342440; --fact-ink: #6ee7a8;
+    --assess-bg: #2a2e35; --assess-ink: #aab2c2;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  .kicker { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 .4rem; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .6rem; letter-spacing: -.01em; }
+  .lede { color: var(--muted); font-size: 1.05rem; margin: 0; }
+  .meta-line { color: var(--muted); font-size: .82rem; margin-top: 1rem; }
+  .throughline {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 1.1rem 1.2rem;
+    margin: 2rem 0 2.5rem;
+  }
+  .throughline strong { color: var(--accent); }
+  h2 { font-size: 1.15rem; margin: 2.6rem 0 .3rem; letter-spacing: -.005em; }
+  h2 .num { color: var(--muted); font-weight: 600; margin-right: .5rem; }
+  .section-sub { color: var(--muted); margin: 0 0 1.1rem; font-size: .95rem; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--cat, var(--line));
+    border-radius: 8px;
+    padding: 1rem 1.15rem;
+    margin: .8rem 0;
+  }
+  .card h3 { margin: 0 0 .35rem; font-size: 1.02rem; }
+  .card p { margin: .45rem 0 0; }
+  .card p:first-of-type { margin-top: .2rem; }
+  .cat-rigor { --cat: var(--rigor); }
+  .cat-silent { --cat: var(--silent); }
+  .cat-ops { --cat: var(--ops); }
+  .cat-leverage { --cat: var(--leverage); }
+  .cat-meta { --cat: var(--meta); }
+  .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .15rem; }
+  .badge {
+    font-size: .7rem; font-weight: 600; letter-spacing: .02em;
+    padding: .12rem .5rem; border-radius: 999px; white-space: nowrap;
+  }
+  .b-rigor { background: color-mix(in srgb, var(--rigor) 15%, transparent); color: var(--rigor); }
+  .b-silent { background: color-mix(in srgb, var(--silent) 15%, transparent); color: var(--silent); }
+  .b-ops { background: color-mix(in srgb, var(--ops) 15%, transparent); color: var(--ops); }
+  .b-leverage { background: color-mix(in srgb, var(--leverage) 15%, transparent); color: var(--leverage); }
+  .b-meta { background: color-mix(in srgb, var(--meta) 18%, transparent); color: var(--meta); }
+  .prov { font-size: .68rem; font-weight: 600; padding: .12rem .5rem; border-radius: 999px; }
+  .prov-fact { background: var(--fact-bg); color: var(--fact-ink); }
+  .prov-assess { background: var(--assess-bg); color: var(--assess-ink); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em;
+    background: color-mix(in srgb, var(--ink) 8%, transparent); padding: .08em .35em; border-radius: 4px; }
+  .managed { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: .6rem 1.2rem 1.1rem; margin-top: 1rem; }
+  .managed ol { margin: .6rem 0 0; padding-left: 1.3rem; }
+  .managed li { margin: .5rem 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 1rem 0 0; font-size: .8rem; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: .4rem; }
+  .dot { width: .7rem; height: .7rem; border-radius: 3px; display: inline-block; }
+  footer { margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  a { color: var(--ops); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="kicker">pi-opsx-dev-reviewer · operating guide</p>
+  <h1>The unknown-unknowns of developing inside this harness</h1>
+  <p class="lede">The dangerous risks here aren't bugs — they're places where the harness feels more rigorous than it is, and the seat you operate from can't see the difference.</p>
+  <p class="meta-line">Grounded in the kit's own code and pi's docs (read this session). Each item is tagged
+    <span class="prov prov-fact">pi / kit fact</span> where it's verified from source, or
+    <span class="prov prov-assess">assessment</span> where it's reasoning. Last reviewed 2026-07-08.</p>
+</header>
+
+<div class="throughline">
+  This harness is good at making the <strong>developer</strong> disciplined and the
+  <strong>review</strong> structured — but it quietly relocates the risk to three places it
+  does not guard: <strong>the brief, the spec, and you</strong>. Everything below is a specific
+  instance of that.
+</div>
+
+<h2><span class="num">1</span>Manufactured rigor</h2>
+<p class="section-sub">The harness projects a strong sensation of rigor. Because <code>force-delegate</code> makes your seat read-only, you fly on instruments you can't independently calibrate. "Green" means <em>two models agreed and a checkbox was ticked</em> — not <em>this is correct</em>. Trust the weakest link, not the ceremony.</p>
+
+<div class="card cat-rigor">
+  <div class="tags"><span class="badge b-rigor">manufactured rigor</span><span class="prov prov-fact">pi / kit fact</span><span class="prov prov-assess">assessment</span></div>
+  <h3>The reviewer runs nothing</h3>
+  <p>The reviewer is read-only (<code>read/find/ls/grep</code>, no bash), so the "empirical gate" — a BLOCK must name a runnable probe — is actually executed <em>by the developer</em>, the party motivated to pass. The reviewer names the probe; the developer runs it and self-reports. That's a fox-guarding-henhouse structure at the centre of the verification story.</p>
+</div>
+
+<div class="card cat-rigor">
+  <div class="tags"><span class="badge b-rigor">manufactured rigor</span><span class="prov prov-fact">pi / kit fact</span><span class="prov prov-assess">assessment</span></div>
+  <h3>The reviewer currently shares the developer's blind spots</h3>
+  <p>Everything is pinned to <code>openai-codex</code> right now. A PASS from <code>gpt-5.4</code> on <code>gpt-5.5</code>'s work is correlated blindness, not independent confirmation — the reviewer misses the class of bugs its own family makes. The sharp version: research documented ten same-corpus reviewers unanimously endorsing a vulnerability that didn't exist.</p>
+</div>
+
+<div class="card cat-rigor">
+  <div class="tags"><span class="badge b-rigor">manufactured rigor</span><span class="prov prov-fact">pi / kit fact</span><span class="prov prov-assess">assessment</span></div>
+  <h3>The developer ticks its own box; the ledger is prompt-enforced</h3>
+  <p>The only "done" signal is two subagents agreeing, and the developer marks its own task <code>[x]</code>. The compounding-findings story depends on the developer appending to <code>review-log.md</code> and you running <code>/opsx-retro</code>. <code>archive-check</code> only confirms <em>a</em> verdict exists — not that every finding was recorded or that the retro ran. The loop can silently fail to compound while still looking green.</p>
+</div>
+
+<h2><span class="num">2</span>Silent failures in pi</h2>
+<p class="section-sub">These bite hardest because there's no error — the safety simply isn't there.</p>
+
+<div class="card cat-silent">
+  <div class="tags"><span class="badge b-silent">silent failure</span><span class="prov prov-fact">pi fact</span></div>
+  <h3>The enforcers load only after project trust</h3>
+  <p>pi loads <code>.pi/extensions/</code> only after the project is trusted. In an untrusted project, a fresh clone, or a headless/CI run that didn't pre-approve trust, <code>force-delegate</code> and <code>architect-scope</code> <strong>don't load</strong> — and the main agent is silently <em>not</em> read-only. It will self-edit while you believe delegation is enforced. Run the README's "Force proof" (ask the main agent to write a file; confirm it's blocked) at the start of any session that matters.</p>
+</div>
+
+<div class="card cat-silent">
+  <div class="tags"><span class="badge b-silent">silent failure</span><span class="prov prov-fact">pi fact</span><span class="prov prov-assess">assessment</span></div>
+  <h3>architect-scope fails open</h3>
+  <p>It detects the architect from the tail of <code>PI_SUBAGENT_STACK</code>. If a future <code>@mjakl/pi-subagent</code> changes how that variable is populated, the check returns "unknown agent", the extension no-ops, and the architect silently regains full write access to your codebase. The degradation is invisible until the architect writes code it shouldn't.</p>
+</div>
+
+<div class="card cat-silent">
+  <div class="tags"><span class="badge b-silent">silent failure</span><span class="prov prov-fact">kit fact</span></div>
+  <h3>The developer is unsandboxed by design</h3>
+  <p>The developer keeps full <code>write</code> + <code>bash</code> so it can do the work, and the kit ships <em>no</em> damage-control on it. <code>force-delegate</code> restricts your seat, not the worker. A hallucinated <code>rm -rf</code> or a bad migration from the developer executes. pi is YOLO-by-default; nothing here sandboxes the one agent that can actually destroy things.</p>
+</div>
+
+<div class="card cat-silent">
+  <div class="tags"><span class="badge b-silent">silent failure</span><span class="prov prov-fact">observed this session</span></div>
+  <h3>Subagents die on transient provider errors</h3>
+  <p>We hit this repeatedly today — a code subagent died twice mid-task on connection errors. A dead subagent can look like a partial or stalled task; if the orchestrator doesn't notice and retry, work gets marked as progressed that never actually happened.</p>
+</div>
+
+<h2><span class="num">3</span>What you'll feel operationally</h2>
+
+<div class="card cat-ops">
+  <div class="tags"><span class="badge b-ops">operational</span><span class="prov prov-fact">research</span></div>
+  <h3>Latency and cost multiply invisibly</h3>
+  <p>Every task is at least two full <code>pi</code> process spawns (developer + reviewer), each a cold start replaying full context — multi-agent runs use roughly 15× the tokens of a single chat. A 20-task change with a few BLOCK loops is 50+ cold spawns. On a ChatGPT subscription it's within plan, but it will <em>feel</em> slow long before you'd notice a bill.</p>
+</div>
+
+<div class="card cat-ops">
+  <div class="tags"><span class="badge b-ops">operational</span><span class="prov prov-assess">assessment</span></div>
+  <h3>You're out of the loop by design — the discipline trap</h3>
+  <p>Your instinct to "just fix this one line myself" is blocked by <code>force-delegate</code>. The moment you disable the extension for a quick fix is the moment you lose the guarantee — and nothing in the harness can enforce discipline on <em>you</em>. That's the most common way setups like this quietly stop being real.</p>
+</div>
+
+<div class="card cat-ops">
+  <div class="tags"><span class="badge b-ops">operational</span><span class="prov prov-fact">pi fact</span><span class="prov prov-assess">assessment</span></div>
+  <h3>Briefing is the hidden bottleneck</h3>
+  <p>Each subagent sees <em>only</em> its Task string and cannot ask a clarifying question (fresh offline process). An incomplete brief produces a confident <em>wrong</em> build, not an error. The main agent — the one component with no quality gate on its own output — sets the ceiling on every delegation.</p>
+</div>
+
+<h2><span class="num">4</span>Where your leverage actually moved</h2>
+
+<div class="card cat-leverage">
+  <div class="tags"><span class="badge b-leverage">leverage shift</span><span class="prov prov-assess">assessment</span></div>
+  <h3>The spec is now the contract, faithfully amplified</h3>
+  <p>The point of a disciplined developer is fidelity to the spec — which means spec <em>errors</em> propagate with full confidence across every task. A wrong spec yields perfectly-built wrong software. Your attention needs to move upstream to the proposal and architect settlement, and that's currently the <em>least</em>-gated stage in the pipeline. That's the real trade: fewer implementation bugs, higher stakes on getting the spec right.</p>
+</div>
+
+<div class="card cat-leverage">
+  <div class="tags"><span class="badge b-leverage">leverage shift</span><span class="prov prov-fact">research</span></div>
+  <h3>openspec update clobbers generated prompts</h3>
+  <p><code>openspec update</code> regenerates <code>.pi/prompts/opsx-apply.md</code> and would overwrite hand-edits. Customise the wrong file and a routine update silently reverts your delegation wiring — use the bundled <code>dev-reviewer</code> schema instead of hand-editing generated prompts.</p>
+</div>
+
+<h2><span class="num">5</span>The honest meta</h2>
+
+<div class="card cat-meta">
+  <div class="tags"><span class="badge b-meta">meta</span><span class="prov prov-fact">fact</span></div>
+  <h3>This harness has never run a live end-to-end delegation</h3>
+  <p>It was hand-built in a single session. The extensions pass unit tests, the schema validates, the docs are clean — but no real <code>/opsx:apply</code> has ever driven the developer → reviewer → tech-writer → archive-check loop. The first few real changes are shakedown runs, not production; expect integration surprises the tests structurally could not catch.</p>
+</div>
+
+<h2><span class="num">6</span>Turning these into managed risks</h2>
+<p class="section-sub">Unknown-unknowns are most useful paired with what converts them to managed. The short list:</p>
+<div class="managed">
+  <ol>
+    <li><strong>Confirm the enforcers engaged</strong> before trusting a session's read-only guarantee — run the "Force proof".</li>
+    <li><strong>Put the reviewer on a genuinely different family</strong> for anything you care about (<code>anthropic/</code> is reachable on this machine); all-OpenAI is fine only for smoke-testing the mechanism.</li>
+    <li><strong>Add damage-control on the developer</strong> before any unattended run — it's the one agent that can destroy state.</li>
+    <li><strong>Spend your review attention on the spec and architect output</strong>, where errors are cheapest to kill and most expensive to miss.</li>
+    <li><strong>Don't trust a PASS without spot-checking</strong> that the reviewer's named probe was actually run and actually passed — that check is the one that collapses if you skip it.</li>
+  </ol>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--rigor)"></span>manufactured rigor</span>
+  <span><span class="dot" style="background:var(--silent)"></span>silent failure</span>
+  <span><span class="dot" style="background:var(--ops)"></span>operational</span>
+  <span><span class="dot" style="background:var(--leverage)"></span>leverage shift</span>
+  <span><span class="dot" style="background:var(--meta)"></span>meta</span>
+</div>
+
+<footer>
+  Companion to <code>README.md</code> and <code>docs/decisions/</code>. This page is a risk map, not a
+  changelog — revisit it after the harness has driven a few real changes, since live use is what turns
+  these unknown-unknowns into known ones.
+</footer>
+</div>
+</body>
+</html>

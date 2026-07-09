@@ -1,0 +1,21 @@
+extends: existence
+message: "'%s' is an LLM writing tell — cut it or state a measurable fact instead."
+level: error
+ignorecase: true
+tokens:
+  - delve
+  - robust
+  - seamless
+  - seamlessly
+  - pivotal
+  - crucial
+  - meticulous
+  - meticulously
+  - showcase
+  - boasts
+  - vibrant
+  - testament
+  - "serves as"
+  - "stands as"
+  - "plays a (vital|crucial|key) role"
+  - "not just [^,]+, but"

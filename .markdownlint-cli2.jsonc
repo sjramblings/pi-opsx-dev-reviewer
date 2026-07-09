@@ -1,0 +1,20 @@
+{
+  // Docs structural rules for the kit. Errors here are the non-negotiable floor;
+  // everything not listed keeps its markdownlint default.
+  "config": {
+    "MD001": true,   // headings increment one level at a time
+    "MD003": { "style": "atx" },
+    "MD004": { "style": "dash" },
+    "MD013": false,  // no hard line-length cap — prose wraps naturally
+    "MD024": { "siblings_only": true },
+    "MD025": true,   // one H1 per document
+    "MD033": false,  // inline HTML allowed (details/callout)
+    "MD040": true,   // fenced code blocks must declare a language
+    "MD041": true,   // first line is a top-level heading
+    "MD042": true,   // no empty links
+    "MD051": true,   // link fragments resolve to real headings
+    "MD059": true    // descriptive link text — no "click here"
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules", ".git"]
+}

@@ -1,0 +1,5 @@
+# Link-check exclusions (regex, one per line).
+# Local placeholder paths referenced in prose but not resolvable as URLs.
+file://
+localhost
+127\.0\.0\.1
