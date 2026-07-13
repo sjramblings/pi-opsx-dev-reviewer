@@ -26,6 +26,8 @@
  * Install (per OpenSpec project): copy this folder to  <repo>/.pi/extensions/
  */
 
+import { logBlocked } from "../lib/tool-events";
+
 const DELEGATE_REASON =
 	"force-delegate: the main agent is read-only. Delegate implementation to the " +
 	"developer subagent, then verify with the reviewer subagent (the subagent tool).";
@@ -99,12 +101,15 @@ export default function (pi: any) {
 
 	pi.on("tool_call", async (event: any) => {
 		if (event.toolName === "write" || event.toolName === "edit") {
+			const target = event.input?.path ?? event.input?.file_path;
+			logBlocked("force-delegate", event.toolName, DELEGATE_REASON, target);
 			return { block: true, reason: DELEGATE_REASON };
 		}
 		if (event.toolName === "bash") {
 			if (isReadOnlyBash(event.input?.command)) {
 				return undefined;
 			}
+			logBlocked("force-delegate", "bash", BASH_REASON, event.input?.command);
 			return { block: true, reason: BASH_REASON };
 		}
 		return undefined;

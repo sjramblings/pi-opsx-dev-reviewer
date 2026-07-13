@@ -70,8 +70,9 @@ install_project() {
   # 2. Tools (retrieval + audit + trust + goals engines) → <repo>/tools/
   mkdir -p "$TARGET/tools"
   cp "$HERE"/tools/select-learnings.ts "$HERE"/tools/audit-learnings.ts \
-     "$HERE"/tools/trust.ts "$HERE"/tools/verify-goals.ts "$HERE"/tools/session-cost.ts "$TARGET/tools/"
-  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost)"
+     "$HERE"/tools/trust.ts "$HERE"/tools/verify-goals.ts "$HERE"/tools/session-cost.ts \
+     "$HERE"/tools/assess-tool-events.ts "$TARGET/tools/"
+  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events)"
 
   # 3. OpenSpec dev-reviewer schema + config. A repo has exactly ONE schema; if this repo
   #    already uses a different one, the dev-reviewer apply flow is mutually exclusive with

@@ -17,6 +17,8 @@
  * Install (per OpenSpec project): copy this folder to  <repo>/.pi/extensions/
  */
 
+import { logBlocked } from "../lib/tool-events";
+
 // [pattern, reason]. Patterns are matched against the raw bash command string.
 const DESTRUCTIVE: Array<[RegExp, string]> = [
 	[new RegExp("(^|\\s)rm\\s+-\\S*r\\S*f"), "recursive force delete (rm -rf)"],
@@ -49,11 +51,10 @@ export default function (pi: any) {
 		if (event.toolName !== "bash") return undefined;
 		const reason = destructiveReason(event.input?.command);
 		if (!reason) return undefined;
-		return {
-			block: true,
-			reason:
-				"developer-guard: blocked a destructive command (" + reason + "). Scope it " +
-				"narrowly or surface it to the human -- do not route around this guard.",
-		};
+		const msg =
+			"developer-guard: blocked a destructive command (" + reason + "). Scope it " +
+			"narrowly or surface it to the human -- do not route around this guard.";
+		logBlocked("developer-guard", "bash", msg, event.input?.command);
+		return { block: true, reason: msg };
 	});
 }

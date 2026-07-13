@@ -8,9 +8,13 @@ argument-hint: "<change-name>"
 Change: `$1`
 
 Turn this change's review findings into permanent back-pressure so the next change
-is cheaper. Read `openspec/changes/$1/review-log.md`.
+is cheaper. Read `openspec/changes/$1/review-log.md`, then run `just tool-events` to
+surface the actions the guards blocked and any retry loops — process-friction signals
+the PASS/BLOCK verdicts miss (a repeatedly-blocked action or a retried command is often
+a missing rule or dependency).
 
-1. Group the reviewer findings into recurring classes (same root cause across tasks).
+1. Group the reviewer findings AND the tool-event signal into recurring classes (same
+   root cause across tasks).
 2. For each recurring class, codify it in the most deterministic surface available.
    **Route by one fact / one writable home** (see `learnings/README.md`):
    - Mechanically checkable → a lint rule or test (strongest; prefer this).

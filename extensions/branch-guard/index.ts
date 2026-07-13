@@ -19,6 +19,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { logBlocked } from "../lib/tool-events";
 
 const PROTECTED = new Set(["main", "master"]);
 const CHAIN_SPLIT = new RegExp("&&|\\|\\||[;&\\n|]");
@@ -91,11 +92,10 @@ export default function (pi: any) {
 		if (event.toolName !== "bash") return undefined;
 		const v = violation(event.input?.command);
 		if (!v) return undefined;
-		return {
-			block: true,
-			reason:
-				"branch-guard: blocked " + v + ". This harness enforces PR flow -- create a " +
-				"feature branch and open a pull request; never change main/master directly.",
-		};
+		const msg =
+			"branch-guard: blocked " + v + ". This harness enforces PR flow -- create a " +
+			"feature branch and open a pull request; never change main/master directly.";
+		logBlocked("branch-guard", "bash", msg, event.input?.command);
+		return { block: true, reason: msg };
 	});
 }

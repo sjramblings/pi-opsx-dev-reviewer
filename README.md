@@ -52,6 +52,7 @@ pi-opsx-dev-reviewer/
 ├── index.html                        # single-page visual guide to the whole harness
 ├── HARDENING_PLAN.md · SHAKEDOWN.md · docs/operating-risks.html   # risk map + hardening build
 └── extensions/
+    ├── lib/tool-events.ts            # shared: guards append every BLOCKED call to memory/tool-events.jsonl
     ├── force-delegate/index.ts       # ENFORCER — read-only main agent (write/edit blocked, bash allowlisted)
     ├── architect-scope/index.ts      # fail-closed path-gate: architect writes design artifacts only
     ├── harness-selftest/index.ts     # session-start canary — loud HALT if force-delegate did not load
@@ -180,6 +181,9 @@ Every change ratchets into durable back-pressure so the next one is cheaper:
   goals and proposes at most three new laws for your sign-off.
 - **Session cost rollup** (`just session-cost <session.jsonl>`) — totals a pi session's cost per
   model (which `pi --export` does not), and flags subagent calls whose cost is TUI-only.
+- **Tool-event assessment** (`just tool-events`) — the guards log every *blocked* action to
+  `memory/tool-events.jsonl`; this mines that ledger (and, with `--session`, retry loops in a pi
+  session) into candidate learnings for `/opsx-retro` — process friction the verdicts miss.
 
 The exact command sequence by cadence (inner loop → ratchet → daily → weekly) is in
 [`index.html`](index.html) under "The continual-learning lifecycle". Routing rule: global

@@ -23,6 +23,8 @@
  * Install (per OpenSpec project): copy this folder to  <repo>/.pi/extensions/
  */
 
+import { logBlocked } from "../lib/tool-events";
+
 const REASON =
 	"architect-scope: writes are restricted to design artifacts (proposal.md, design.md, " +
 	"specs/**, docs/decisions/**) for the solution-architect and for any unidentified " +
@@ -79,8 +81,12 @@ export default function (pi: any) {
 				: undefined;
 
 		// No parseable target -> block rather than allow (fail closed).
-		if (!target) return { block: true, reason: REASON };
+		if (!target) {
+			logBlocked("architect-scope", event.toolName, REASON, "");
+			return { block: true, reason: REASON };
+		}
 		if (isDesignArtifact(target)) return undefined;
+		logBlocked("architect-scope", event.toolName, REASON, target);
 		return { block: true, reason: REASON };
 	});
 }

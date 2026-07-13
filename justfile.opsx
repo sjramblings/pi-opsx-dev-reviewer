@@ -70,8 +70,9 @@ check-extensions:
     #!/usr/bin/env bash
     set -uo pipefail
     shopt -s nullglob
-    # Kit-dev layout (extensions/) AND installed-project layout (.pi/extensions/).
-    files=(extensions/*/index.ts .pi/extensions/*/index.ts)
+    # Kit-dev layout (extensions/) AND installed-project layout (.pi/extensions/), plus the
+    # shared lib/ imported by the guards (a load-breaker there breaks every guard too).
+    files=(extensions/*/index.ts extensions/lib/*.ts .pi/extensions/*/index.ts .pi/extensions/lib/*.ts)
     if [ ${#files[@]} -eq 0 ]; then echo "check-extensions: no extensions found (nothing to check)"; exit 0; fi
     rc=0
     for f in "${files[@]}"; do
@@ -251,3 +252,9 @@ goals:
 # --html to emit a cost-summary fragment to sit beside the exported session HTML.
 session-cost session *flags:
     @bun tools/session-cost.ts {{session}} {{flags}}
+
+# Mine the guards' blocked-action ledger (memory/tool-events.jsonl) — and, with --session
+# <s.jsonl>, retry loops in a pi session — into candidate learnings for /opsx-retro. Derives
+# the recurring signal; does not re-log every call (pi's session jsonl already has those).
+tool-events *flags:
+    @bun tools/assess-tool-events.ts {{flags}}

@@ -247,7 +247,11 @@ via pi&#39;s <code>tool_call</code> and <code>session_start</code> events.</p>
 <tr><td><code>harness-selftest</code></td><td><code>session_start</code></td><td>Loud <code>HARNESS UNGUARDED</code> halt if force-delegate did not load.</td></tr>
 <tr><td><code>developer-guard</code></td><td><code>tool_call</code></td><td>Blocks catastrophic bash (recursive rm, force-push, sudo, dd/mkfs, curl-pipe-shell, fork bomb) for every agent.</td></tr>
 <tr><td><code>branch-guard</code></td><td><code>tool_call</code></td><td>Enforces PR flow: blocks commit/push/force-push to protected branches (main/master) for every agent.</td></tr>
+<tr><td><code>opsx-reminder</code></td><td><code>session_start</code></td><td>Nudges the one pending lifecycle action (an all-ticked un-archived change &rarr; run <code>/opsx-retro</code>; draft learnings awaiting promotion); silent when nothing pends.</td></tr>
 </table></div>
+<p class="sub">The four <code>tool_call</code> guards share <code>extensions/lib/tool-events.ts</code>: every
+<strong>blocked</strong> action is appended (best-effort, fail-open) to <code>memory/tool-events.jsonl</code>, which
+<code>just tool-events</code> mines into candidate learnings.</p>
 
 <h2 id="recipes">Gates &amp; recipes (justfile)</h2>
 <p class="sub">Deterministic checks. The lint-style gates degrade gracefully (skip a missing tool with a notice, never a
@@ -267,6 +271,7 @@ false pass); the guards never skip.</p>
 <tr><td><code>just trust</code> · <code>trust-log</code></td><td>Per-skill autonomy ledger: render tiers, or record a pass/fail. auto = &ge;20 runs &amp; &ge;95%.</td><td>Never</td></tr>
 <tr><td><code>just goals</code></td><td>Re-verify every standing-goal predicate; flip satisfied/VIOLATED; exit non-zero on regression.</td><td>Never</td></tr>
 <tr><td><code>just session-cost &lt;session.jsonl&gt;</code></td><td>Roll up a pi session's cost per model + grand total (the export shows none); flags subagent calls whose cost is TUI-only. <code>--html</code> emits a viewer fragment.</td><td>Never</td></tr>
+<tr><td><code>just tool-events</code></td><td>Mine the guards' blocked-action ledger (and, with <code>--session</code>, retry loops) into candidate learnings for <code>/opsx-retro</code>.</td><td>Never</td></tr>
 <tr><td><code>just docs-lint</code></td><td>markdownlint + Vale + lychee + cspell over all Markdown.</td><td>Graceful</td></tr>
 <tr><td><code>just docs-lint-setup</code></td><td>Installs the docs-lint toolchain.</td><td>—</td></tr>
 </table></div>
