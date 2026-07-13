@@ -30,6 +30,13 @@ every recipe — the host's own included — stops working. macOS case-insensiti
 a `Justfile` vs `justfile` mismatch. Fix: split recipes into a default-free `justfile.opsx`;
 the kit `justfile` owns `default` and imports it.
 
+## Refutation (the hard-to-vary core)
+
+- **conjectured:** shipping the kit justfile verbatim as `justfile.opsx` is safe to import.
+- **refuted_by:** a host justfile with its own `default` collided → `just` errored and every recipe (the host's own included) broke.
+- **learned:** an importable fragment must define no recipe name the host already owns — above all `default`.
+- **criterion_now:** `justfile.opsx` defines no `default`; the importing justfile owns it and does `import`.
+
 ## Example
 
 Bad (justfile.opsx):

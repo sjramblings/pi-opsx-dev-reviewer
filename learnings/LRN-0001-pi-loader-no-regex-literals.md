@@ -29,6 +29,13 @@ the real pi load path is dead. This silently disabled both `force-delegate` and
 `architect-scope` during the dogfood (see SHAKEDOWN.md); `just check-extensions` was added
 as the static guard for exactly this class.
 
+## Refutation (the hard-to-vary core)
+
+- **conjectured:** an extension that passes `bun build`, jiti, and unit tests is loaded and active in pi.
+- **refuted_by:** pi silently disabled force-delegate and architect-scope during the dogfood while all three passed (SHAKEDOWN.md).
+- **learned:** pi's extension load path is not exercised by bun/jiti/tests — only loading through pi catches a tokenizer break.
+- **criterion_now:** `just check-extensions` greps for regex literals, raw backticks, and apostrophes.
+
 ## Example
 
 Bad:

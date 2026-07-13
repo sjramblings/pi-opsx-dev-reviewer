@@ -36,4 +36,13 @@ and stably ordered (severity desc, recency desc, id). `/opsx-loop` calls it at B
 developer gets exactly the relevant back-pressure. `just check-learnings` is the canary that
 fails loud if retrieval silently returns nothing when it must return something.
 
+## The refutation core (why learnings compound)
+
+Every learning carries a `## Refutation` block — `conjectured → refuted_by → learned →
+criterion_now` (David Deutsch's hard-to-vary shape, borrowed from the Algorithm's Changelog).
+A flat rule records the *what*; the refutation records *what belief was wrong and the evidence
+that broke it*. That is what lets accumulated learnings **compound** into a self-improvement
+loop instead of piling up — and it is the substrate `/opsx-compost` reads when proposing new
+doctrine. A learning without a refutation is an assumption with a rule attached.
+
 See `_TEMPLATE.md` for the entry schema.

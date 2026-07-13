@@ -184,6 +184,16 @@ Every change ratchets into durable back-pressure so the next one is cheaper:
 - **Tool-event assessment** (`just tool-events`) — the guards log every *blocked* action to
   `memory/tool-events.jsonl`; this mines that ledger (and, with `--session`, retry loops in a pi
   session) into candidate learnings for `/opsx-retro` — process friction the verdicts miss.
+- **Refutation format** — every learning carries `conjectured → refuted_by → learned →
+  criterion_now` (the Algorithm's hard-to-vary Changelog shape) so knowledge compounds instead
+  of piling up.
+- **Reproduce-first** — a bug-fix task's first probe must be a failing reproduction (red→green);
+  the reviewer BLOCKs a fix with no repro.
+- **Commitment-boundary advice** (`/opsx-advise`) — a cross-family second opinion on the
+  *approach* (not the spec, not the diff) before the expensive build commits.
+- **The meta-loop** — `/opsx-retro` writes a per-change reflection; `/opsx-compost` mines those
+  reflections plus the trust / goals / tool-event signals and proposes **process/doctrine**
+  changes — propose-only, human sign-off, grounded in evidence, never self-applied.
 
 The exact command sequence by cadence (inner loop → ratchet → daily → weekly) is in
 [`index.html`](index.html) under "The continual-learning lifecycle". Routing rule: global

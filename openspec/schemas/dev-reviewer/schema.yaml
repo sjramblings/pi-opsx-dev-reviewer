@@ -59,6 +59,9 @@ artifacts:
       Break the work into checkbox tasks. Group under ## numbered headings; each task is
       `- [ ] X.Y Task description`, small enough for one session, ordered by dependency.
       The apply phase parses `- [ ]` to track progress — tasks not using it aren't tracked.
+      Reproduce-first: for a bug-fix task, its FIRST `probe:` line must be a failing
+      reproduction the change turns green (red->green). The reviewer BLOCKs a bug fix with
+      no reproduction.
     requires:
       - specs
       - design

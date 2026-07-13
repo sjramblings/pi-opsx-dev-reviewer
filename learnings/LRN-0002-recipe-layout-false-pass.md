@@ -29,6 +29,13 @@ nothing, `grep` errored, but `rc` stayed 0 — so the load-breaker guard printed
 checking nothing, in every installed repo. A guard that silently checks nothing is worse
 than no guard. Caught only by a live install-into-temp-repo run, not by static checks.
 
+## Refutation (the hard-to-vary core)
+
+- **conjectured:** a guard recipe that prints "clean" has actually verified the extensions.
+- **refuted_by:** in an installed repo the `extensions/*/index.ts` glob matched nothing, grep errored, but rc stayed 0 → a false "clean".
+- **learned:** a guard that scans one fixed directory false-passes when the recipe is copied to a different layout.
+- **criterion_now:** scan every real layout with `nullglob` plus an explicit "nothing to check" branch.
+
 ## Example
 
 Bad:

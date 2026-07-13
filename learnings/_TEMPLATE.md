@@ -22,6 +22,17 @@ The rule as an imperative sentence — what the developer must do or must not do
 
 The failure this prevents, and where it was caught (review-log entry / probe).
 
+## Refutation (the hard-to-vary core)
+
+The epistemic record — what we believed, what broke it, what survives. This is what makes an
+accumulated learning compound rather than pile up (a flat rule says the "what"; this says the
+"why it is true"). Keep all four lines; a learning without a refutation is an assumption.
+
+- **conjectured:** what we believed was true / safe / sufficient
+- **refuted_by:** the concrete evidence that broke it (a probe, a failing run, a review finding)
+- **learned:** the durable insight that survives
+- **criterion_now:** the rule or probe that now guards it
+
 ## Example
 
 Bad:

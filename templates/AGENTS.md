@@ -12,6 +12,7 @@ like code.
 ## Rules
 
 - Keep README.md and index.html current with shipped user-facing features; a stale entry doc is a BLOCK finding (enforced by the dev-reviewer `docs` artifact).
+- Reproduce before fixing: a bug-fix task's FIRST `probe:` must be a failing reproduction, and the fix must show red→green evidence. A fix with no reproduction is a BLOCK finding.
 
 <!-- One line per rule. Example shape: -->
 <!-- - Validate every boundary response shape before trusting it (caught 3× in review). -->

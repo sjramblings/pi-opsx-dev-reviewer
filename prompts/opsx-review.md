@@ -17,3 +17,8 @@ Call the `subagent` tool with `agent="reviewer"`. Give it a self-contained brief
 
 Relay the reviewer's `VERDICT` block verbatim. A `BLOCK` requires a runnable probe
 (failing test, command, or repro); a PLAUSIBLE-only finding cannot block on its own.
+
+**Reproduce-first for bug fixes:** if the task is a bug fix, the reviewer must confirm the
+evidence includes a **failing reproduction** that the change turns green (red→green). A
+bug-fix diff with no reproduction is an automatic `BLOCK` — a fix you cannot prove was needed
+is a fix you cannot prove works.

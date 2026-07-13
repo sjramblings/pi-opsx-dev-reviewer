@@ -43,10 +43,10 @@ install_global() {
   # 2b. Prompt templates → the active global prompts dir ───────────────────────
   PROMPTS_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/prompts"
   mkdir -p "$PROMPTS_DIR"
-  for p in opsx-loop opsx-review opsx-retro opsx-compost; do
+  for p in opsx-loop opsx-review opsx-retro opsx-compost opsx-advise; do
     cp "$HERE/prompts/$p.md" "$PROMPTS_DIR/$p.md"
   done
-  echo "→ Installed /opsx-loop, /opsx-review, /opsx-retro, /opsx-compost prompt templates to $PROMPTS_DIR"
+  echo "→ Installed /opsx-loop, /opsx-review, /opsx-retro, /opsx-compost, /opsx-advise prompt templates to $PROMPTS_DIR"
 
   # 3. Model sanity check ──────────────────────────────────────────────────────
   echo "→ Verify the agent models resolve on this machine (edit the 'model:' line if not):"

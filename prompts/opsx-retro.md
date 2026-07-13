@@ -30,7 +30,11 @@ a missing rule or dependency).
    pattern is cited by multiple review-log entries). Retire learnings that no longer fire.
 4. Propose the edits, get sign-off, then apply them. Run `just learnings-audit` to confirm
    provenance + schema, and `just check-learnings` to confirm the retrieval path is live.
-5. Only then `openspec archive $1`.
+5. **Reflection (feeds the meta-loop):** append ONE JSON line to `memory/reflections.jsonl` —
+   `{"change":"$1","learned":"<the durable insight>","smarter_next":"<what a better harness
+   would have done>"}`. This is the raw material `/opsx-compost` mines to improve the harness
+   itself. Keep it honest and specific; a vague reflection is noise.
+6. Only then `openspec archive $1`.
 
 Report which findings were codified where (lint / config / AGENTS.md / `learnings/`), and
 which were one-offs not worth a rule.
