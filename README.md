@@ -58,7 +58,7 @@ pi-opsx-dev-reviewer/
     ├── harness-selftest/index.ts     # session-start canary — loud HALT if force-delegate did not load
     ├── developer-guard/index.ts      # damage-control on write-capable subagents (blocks catastrophic bash)
     ├── branch-guard/index.ts         # PR-flow enforcer — blocks commit/push/force-push to main/master
-    └── opsx-reminder/index.ts        # session-start nudge — the one pending lifecycle action
+    └── opsx-reminder/index.ts        # session-start nudge — pins pending lifecycle actions as a themed widget + status badge
 ```
 
 (`memory/` — the trust + goal ledgers — is generated at runtime and gitignored, never committed.)

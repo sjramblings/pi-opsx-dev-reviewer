@@ -247,7 +247,7 @@ via pi&#39;s <code>tool_call</code> and <code>session_start</code> events.</p>
 <tr><td><code>harness-selftest</code></td><td><code>session_start</code></td><td>Loud <code>HARNESS UNGUARDED</code> halt if force-delegate did not load.</td></tr>
 <tr><td><code>developer-guard</code></td><td><code>tool_call</code></td><td>Blocks catastrophic bash (recursive rm, force-push, sudo, dd/mkfs, curl-pipe-shell, fork bomb) for every agent.</td></tr>
 <tr><td><code>branch-guard</code></td><td><code>tool_call</code></td><td>Enforces PR flow: blocks commit/push/force-push to protected branches (main/master) for every agent.</td></tr>
-<tr><td><code>opsx-reminder</code></td><td><code>session_start</code></td><td>Nudges the one pending lifecycle action (an all-ticked un-archived change &rarr; run <code>/opsx-retro</code>; draft learnings awaiting promotion); silent when nothing pends.</td></tr>
+<tr><td><code>opsx-reminder</code></td><td><code>session_start</code></td><td>Pins the pending lifecycle actions (all-ticked un-archived change &rarr; <code>/opsx-retro</code>; draft learnings awaiting promotion) as a persistent <code>setWidget</code> panel above the editor + a <code>setStatus</code> footer badge, rendered in the active pi theme; clears itself when nothing pends.</td></tr>
 </table></div>
 <p class="sub">The four <code>tool_call</code> guards share <code>extensions/lib/tool-events.ts</code>: every
 <strong>blocked</strong> action is appended (best-effort, fail-open) to <code>memory/tool-events.jsonl</code>, which

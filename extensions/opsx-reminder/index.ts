@@ -103,39 +103,48 @@ export default function (pi: any) {
 	pi.on("session_start", async (_event: any, ctx: any) => {
 		if (Number(process.env.PI_SUBAGENT_DEPTH ?? "0") > 0) return;
 
-		let messages: string[] = [];
+		const lines: string[] = [];
 		try {
 			const root = process.cwd();
-			const retro = changesAwaitingRetro(root);
-			for (const name of retro) {
-				messages.push(
-					"opsx: change " + name + " has all tasks ticked but is not archived. Run " +
-						"/opsx-retro " + name + " to ratchet its findings, then just archive-check " +
-						name + " before openspec archive.",
-				);
+			for (const name of changesAwaitingRetro(root)) {
+				lines.push("-> /opsx-retro " + name + "   (all tasks ticked, not archived)");
 			}
 			const drafts = draftLearnings(root);
 			if (drafts > 0) {
-				messages.push(
-					"opsx: " + String(drafts) + " draft learning(s) are pending promotion. Review " +
-						"them and set status: active during /opsx-retro so they inject at BRIEF.",
-				);
+				lines.push("-> " + String(drafts) + " draft learning(s) awaiting promotion");
 			}
 		} catch {
 			// Best-effort only: never break session start over a reminder.
 			return;
 		}
 
-		if (messages.length === 0) return; // nothing pending -- stay quiet
-
-		const banner = messages.join("\n");
-		process.stderr.write("\n----- opsx-reminder -----\n" + banner + "\n\n");
-		if (ctx && ctx.ui && typeof ctx.ui.notify === "function") {
-			try {
-				ctx.ui.notify(banner);
-			} catch {
-				// notify is best-effort; the stderr banner is the reliable signal.
+		// All UI is fire-and-forget: the client (interactive TUI) renders it in the active pi
+		// theme, or ignores it (headless / RPC). Each call is wrapped so it can never throw.
+		const ui = ctx && ctx.ui ? ctx.ui : null;
+		const call = (fn: string, ...args: any[]) => {
+			if (ui && typeof ui[fn] === "function") {
+				try {
+					ui[fn](...args);
+				} catch {
+					// fire-and-forget
+				}
 			}
+		};
+
+		if (lines.length === 0) {
+			// Nothing pending: clear any reminder pinned by a prior state so it does not linger.
+			call("setWidget", "opsx-reminder", undefined);
+			call("setStatus", "opsx", undefined);
+			return;
 		}
+
+		// Pin the reminders as a persistent widget above the editor (theme-coloured plain text)
+		// plus a compact footer badge. Both clear themselves once nothing is pending.
+		call("setWidget", "opsx-reminder", ["opsx | pending lifecycle actions:", ...lines], {
+			placement: "aboveEditor",
+		});
+		call("setStatus", "opsx", "opsx: " + lines.length + " pending");
+		// Reliable fallback for clients that ignore UI requests.
+		process.stderr.write("\n----- opsx-reminder -----\n" + lines.join("\n") + "\n\n");
 	});
 }
