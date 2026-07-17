@@ -1,0 +1,476 @@
+== spec-compliant ADR index and met evidence using extensionless LICENSE:1 should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== placeholder stakeholders and concerns should fail 42010 audit ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: FAIL — 01-introduction-and-goals.md: missing stakeholders
+42010 audit checklist: FAIL — 01-introduction-and-goals.md: missing concerns
+arch-lint: FAIL — 2 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== view files with only headings and Not applicable reasons should fail 42010 presented views ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: FAIL — architecture tree: missing presented views
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== stated cost on sixth non-empty claim line should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== section 8 continuation with pattern and later consequence should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== section 8 Pattern Catalogue heading with costed entry should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== section 8 Pattern table header with costed data row should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== section 8 Pattern table costless data row should fail ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/section8-table-data-costless-architecture/08-crosscutting-concepts.md:5: | Outbox pattern | N/A |
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== section 8 bare Consequences label followed by bullet payload should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== section 8 continuation with consequence then pattern prose should pass ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== missing best-practice source should report PARTIAL and not clean ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: SKIP — no corpus lookup tool/source configured (1 identifier(s) unchecked)
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: PARTIAL — 1 check(s) skipped, architecture NOT fully checked
+== absent architecture tree should report not-found, not clean ==
+arch-lint: not-found — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/absent-architecture/ was not found
+error: Recipe `arch-lint` failed with exit code 1
+== section with only horizontal rule should fail completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/horizontal-rule-only-section-architecture/12-glossary.md: no content and no declared non-applicability
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== section with only bare list marker should fail completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/bare-list-marker-section-architecture/12-glossary.md: no content and no declared non-applicability
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== section with only bare table marker should fail completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/bare-table-marker-section-architecture/12-glossary.md: no content and no declared non-applicability
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== section with only a table header should fail completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/header-only-table-section-architecture/12-glossary.md: no content and no declared non-applicability
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== view section with only a table header should fail presented views ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/header-only-view-architecture/03-context-and-scope.md: no content and no declared non-applicability
+── 42010 audit checklist ──
+42010 audit checklist: FAIL — architecture tree: missing presented views
+arch-lint: FAIL — 2 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== section with only a subheading should fail completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/heading-only-section-architecture/12-glossary.md: no content and no declared non-applicability
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== colon-form Not applicable reason should pass completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: clean (all checks ran)
+== bare Not applicable without reason should fail completeness ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/bare-not-applicable-architecture/12-glossary.md: Not applicable declaration needs a one-line reason
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== costless pattern fixture should fail ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/costless-pattern-architecture/08-crosscutting-concepts.md:3: - Pattern: CQRS. Catalogue: fixture pattern catalogue. Instantiated at justfile:37.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== negated cost fixture should fail ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/negated-cost-architecture/08-crosscutting-concepts.md:3: - Pattern: CQRS. Catalogue: fixture pattern catalogue. Instantiated at justfile:37.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== placeholder cost fixture should fail ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/placeholder-cost-architecture/08-crosscutting-concepts.md:3: - Pattern: CQRS. Catalogue: fixture pattern catalogue. Instantiated at justfile:37.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== indented section 8 pattern without consequence should fail ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/indented-costless-pattern-architecture/08-crosscutting-concepts.md:3: - Pattern: CQRS. Catalogue: fixture pattern catalogue. Instantiated at justfile:37.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== prose pattern claim without consequence should fail ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/prose-pattern-architecture/08-crosscutting-concepts.md:3: We rely on the CQRS pattern for writes.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== unresolvable identifier fixture should fail and name the id ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: FAIL — SEC99-BP99 at /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/unresolvable-identifier-architecture/10-quality-requirements.md:3
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== localhost port string should not satisfy met evidence ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/localhost-evidence-architecture/10-quality-requirements.md:3: SEC01-BP01 recorded as met without file:line evidence
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== existing directory path should not satisfy met evidence ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/directory-evidence-architecture/10-quality-requirements.md:3: SEC01-BP01 recorded as met without file:line evidence
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== status before identifier without evidence should fail met evidence ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/status-before-id-architecture/10-quality-requirements.md:4: SEC01-BP01 recorded as met without file:line evidence
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== uncosted ADR reference outside section 9 should fail stated-cost ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/uncosted-section4-architecture/04-solution-strategy.md:3: - Decision ADR 0001 defines the runtime boundary.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== ADR claim must not borrow consequence from sibling bullet ==
+── stated-cost ──
+stated-cost: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/sibling-borrowed-cost-architecture/04-solution-strategy.md:3: - Decision ADR 0001 defines the runtime boundary.
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: ok
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== linked ADR rationale must not be borrowed from another ADR ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/borrowed-rationale-architecture/09-architecture-decisions.md:3: linked ADR 0001 lacks rationale in /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/borrowed-decisions/0001-*.md
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+== placeholder ADR rationale should fail 42010 audit ==
+── stated-cost ──
+stated-cost: ok
+── best-practice identifier resolution ──
+best-practice identifier resolution: ok
+── evidence-for-met ──
+evidence-for-met: ok
+── ADR existence ──
+ADR existence: ok
+── section completeness ──
+section completeness: ok
+── 42010 audit checklist ──
+42010 audit checklist: FAIL — /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/placeholder-rationale-architecture/09-architecture-decisions.md:3: linked ADR 0001 lacks rationale in /var/folders/nr/gghf31dj4fjbc0340481rc000000gn/T/tmp.IfErO2bOr9/placeholder-decisions/0001-*.md
+arch-lint: FAIL — 1 violation(s)
+error: Recipe `arch-lint` failed with exit code 1
+probe: ok

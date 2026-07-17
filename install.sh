@@ -35,10 +35,10 @@ install_global() {
   # 2. Agent files → the active global agents dir ──────────────────────────────
   AGENTS_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/agents"
   mkdir -p "$AGENTS_DIR"
-  for a in solution-architect developer reviewer tech-writer spec-reviewer; do
+  for a in solution-architect developer reviewer tech-writer spec-reviewer architecture-writer; do
     cp "$HERE/agents/$a.md" "$AGENTS_DIR/$a.md"
   done
-  echo "→ Installed architect/developer/reviewer/tech-writer/spec-reviewer agents to $AGENTS_DIR"
+  echo "→ Installed architect/developer/reviewer/tech-writer/spec-reviewer/architecture-writer agents to $AGENTS_DIR"
 
   # 2b. Prompt templates → the active global prompts dir ───────────────────────
   PROMPTS_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/prompts"
@@ -51,6 +51,7 @@ install_global() {
   # 3. Model sanity check ──────────────────────────────────────────────────────
   echo "→ Verify the agent models resolve on this machine (edit the 'model:' line if not):"
   for m in "gpt-5.5 (architect/developer)" "gpt-5.4 (reviewer/tech-writer)"; do echo "      openai-codex/$m"; done
+  echo "      anthropic/claude-opus-4-8 (spec-reviewer/architecture-writer)"
   echo "    List what is available with:  pi --list-models"
   echo
   echo "✓ pi-side (global) setup complete."
@@ -71,8 +72,9 @@ install_project() {
   mkdir -p "$TARGET/tools"
   cp "$HERE"/tools/select-learnings.ts "$HERE"/tools/audit-learnings.ts \
      "$HERE"/tools/trust.ts "$HERE"/tools/verify-goals.ts "$HERE"/tools/session-cost.ts \
-     "$HERE"/tools/assess-tool-events.ts "$TARGET/tools/"
-  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events)"
+     "$HERE"/tools/assess-tool-events.ts "$HERE"/tools/waf-grounding.ts \
+     "$HERE"/tools/arch-lint.ts "$HERE"/tools/pylib.ts "$TARGET/tools/"
+  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, pylib)"
 
   # 3. OpenSpec dev-reviewer schema + config. A repo has exactly ONE schema; if this repo
   #    already uses a different one, the dev-reviewer apply flow is mutually exclusive with
