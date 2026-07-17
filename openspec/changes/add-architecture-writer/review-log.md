@@ -174,3 +174,20 @@ FINDINGS:
 EVIDENCE CHECK: `just docs-lint` output quoted above; agent names and index.html grep re-run.
 RESOLUTION: blocked on change `fix-spec-template-lint`, which settles the lint floor, fixes the
 generator, clears the backlog, and wires the gate into CI. Apply that change, then close 6.1.
+
+## Task 7.1 — Dogfood: generate docs/architecture/ and pass arch-lint
+
+VERDICT: PASS
+FINDINGS:
+- none surviving; six were caught by the gate and fixed before this verdict
+EVIDENCE CHECK: Yes — `just arch-lint` reports `clean (all checks ran)`, exit 0. The tree is
+docs/architecture/README.md plus the twelve arc42 section files. Section 9 indexes both ADRs
+(0001, 0002) by number/title/status/link without authoring them. Section 11 records two
+decision-debt items (fail-closed authorization model; the three-state gate contract). Section
+10 records that AWS Well-Architected assessment is out of scope for a local tool with no
+deployed AWS surface, and carries the corpus provenance from the index. The gate caught six
+real defects first (two broken decision blocks, a negated-consequence phrasing, a "Pattern"
+crosswalk cell, a missing 42010 concerns label, a decision-entry false match) — all fixed,
+then re-run to clean. Generated in this session against the architecture-writer.md spec
+(model architecture-writer runs is anthropic/claude-opus-4-8); it was NOT run through a real
+pi subagent, so task 3.2 (harness-selftest load in real pi) remains separately open.

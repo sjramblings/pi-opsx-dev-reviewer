@@ -109,7 +109,7 @@
 
 ## 7. Dogfood
 
-- [ ] 7.1 Generate `docs/architecture/` for this repo with the new agent and pass `just arch-lint`.
+- [x] 7.1 Generate `docs/architecture/` for this repo with the new agent and pass `just arch-lint`.
       The kit documenting itself is the first real test of the gate.
       files: `docs/architecture/**`
       probe: the tree exists with twelve sections plus an index, `just arch-lint` reports clean, section 9 indexes both ADRs, and section 11 names any decision debt found.
