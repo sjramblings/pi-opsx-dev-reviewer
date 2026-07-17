@@ -1,0 +1,548 @@
+<title>Architecture Evolution — pi-opsx-dev-reviewer</title>
+<script id="model" type="application/json">__MODEL__</script>
+
+<style>
+:root {
+  --ground: #F7F9FB;
+  --panel: #FFFFFF;
+  --panel-2: #EEF2F7;
+  --ink: #131A24;
+  --ink-2: #48566B;
+  --ink-3: #8792A6;
+  --rule: #DBE3ED;
+  --accent: #2F4DDE;
+  --accent-soft: #E6EAFC;
+  --landed: #1F9D6B;
+  --flight: #C98A16;
+  --shadow: 0 1px 2px rgba(19, 26, 36, .06), 0 8px 24px rgba(19, 26, 36, .06);
+
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --wrap: 1120px;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #101720; --panel: #16202C; --panel-2: #1D2937;
+    --ink: #E8EDF4; --ink-2: #A3B0C2; --ink-3: #6F7E93;
+    --rule: #26333F; --accent: #7C90F5; --accent-soft: #1E2A4D;
+    --landed: #3FBF8B; --flight: #E0A93A;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #101720; --panel: #16202C; --panel-2: #1D2937;
+  --ink: #E8EDF4; --ink-2: #A3B0C2; --ink-3: #6F7E93;
+  --rule: #26333F; --accent: #7C90F5; --accent-soft: #1E2A4D;
+  --landed: #3FBF8B; --flight: #E0A93A;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+}
+:root[data-theme="light"] {
+  --ground: #F7F9FB; --panel: #FFFFFF; --panel-2: #EEF2F7;
+  --ink: #131A24; --ink-2: #48566B; --ink-3: #8792A6;
+  --rule: #DBE3ED; --accent: #2F4DDE; --accent-soft: #E6EAFC;
+  --landed: #1F9D6B; --flight: #C98A16;
+  --shadow: 0 1px 2px rgba(19, 26, 36, .06), 0 8px 24px rgba(19, 26, 36, .06);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.mono { font-family: var(--mono); }
+
+/* ---------- masthead ---------- */
+.mast { border-bottom: 1px solid var(--rule); background: var(--panel); }
+.mast-in { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-end;
+  justify-content: space-between; padding: 40px 24px 28px; max-width: var(--wrap); margin: 0 auto; }
+.mast h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08; letter-spacing: -.01em; }
+.mast .sub { color: var(--ink-2); max-width: 60ch; margin-top: 12px; }
+.mast .sub b { color: var(--ink); font-weight: 600; }
+.themer {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--panel-2); color: var(--ink-2); border: 1px solid var(--rule);
+  border-radius: 999px; padding: 7px 14px; cursor: pointer;
+}
+.themer:hover { color: var(--ink); border-color: var(--accent); }
+.themer:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- stat row ---------- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+  border-radius: var(--r); overflow: hidden; margin: 28px 0; }
+.stat { background: var(--panel); padding: 16px 18px; }
+.stat .n { font-family: var(--display); font-size: 30px; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.stat .k { margin-top: 6px; }
+.stat .n.acc { color: var(--accent); }
+
+/* ---------- chart ---------- */
+.chart-card { background: var(--panel); border: 1px solid var(--rule);
+  border-radius: var(--r); padding: 20px; box-shadow: var(--shadow); }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
+.chart-head h2 { font-size: 19px; }
+.chart-head p { margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px; max-width: 62ch; }
+.chart-scroll { overflow-x: auto; }
+#accretion { display: block; width: 100%; min-width: 560px; height: 210px; }
+
+/* ---------- controls ---------- */
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  margin: 32px 0 20px; }
+.controls .lbl { margin-right: 4px; }
+.chip {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em;
+  background: var(--panel); color: var(--ink-2); border: 1px solid var(--rule);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer; transition: .15s;
+}
+.chip:hover { border-color: var(--accent); color: var(--ink); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+:root[data-theme="dark"] .chip[aria-pressed="true"],
+:root:not([data-theme="light"]) .chip[aria-pressed="true"] { color: #0E1420; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .chip[aria-pressed="true"] { color: #fff; }
+}
+
+/* ---------- timeline spine ---------- */
+.spine { position: relative; padding-bottom: 64px; }
+.wave { position: relative; padding-left: 132px; margin-bottom: 8px; }
+.wave::before {
+  content: ""; position: absolute; left: 96px; top: 0; bottom: -8px;
+  width: 2px; background: var(--rule);
+}
+.wave:last-child::before { bottom: auto; height: 40px; }
+.wave-date {
+  position: absolute; left: 0; top: 26px; width: 84px; text-align: right;
+}
+.wave-date .d { font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.wave-date .c { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.wave-dot {
+  position: absolute; left: 89px; top: 30px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--accent); border: 3px solid var(--panel);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.wave.wip .wave-dot { background: var(--flight); box-shadow: 0 0 0 2px var(--flight); }
+
+.card {
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r);
+  padding: 18px 20px; margin: 16px 0; cursor: pointer; width: 100%;
+  text-align: left; font: inherit; color: inherit; display: block;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+}
+.card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card-top { display: flex; justify-content: space-between; gap: 14px;
+  align-items: flex-start; flex-wrap: wrap; }
+.card h3 { font-size: 19px; line-height: 1.25; }
+.card .id { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin-top: 5px; }
+.card .why { color: var(--ink-2); font-size: 14px; margin: 12px 0 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; }
+
+.badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.badge {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em;
+  text-transform: uppercase; padding: 3px 8px; border-radius: 4px;
+  border: 1px solid currentColor; white-space: nowrap;
+}
+.b-landed { color: var(--landed); }
+.b-wip { color: var(--flight); }
+.b-open { color: var(--ink-3); }
+
+.caps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+.cap {
+  font-family: var(--mono); font-size: 11px; background: var(--accent-soft);
+  color: var(--accent); padding: 3px 9px; border-radius: 4px;
+}
+.metrics { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 14px; border-top: 1px solid var(--rule); }
+.metric { display: flex; align-items: baseline; gap: 6px; }
+.metric .v { font-family: var(--mono); font-size: 13px; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.metric .l { font-size: 11.5px; color: var(--ink-3); }
+
+.bar { height: 4px; border-radius: 2px; background: var(--panel-2);
+  overflow: hidden; width: 84px; align-self: center; }
+.bar i { display: block; height: 100%; background: var(--landed); }
+.bar.part i { background: var(--flight); }
+
+/* ---------- drawer ---------- */
+.scrim {
+  position: fixed; inset: 0; background: rgba(10, 14, 20, .5);
+  opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 40;
+  backdrop-filter: blur(2px);
+}
+.scrim.on { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(620px, 100%);
+  background: var(--ground); border-left: 1px solid var(--rule); z-index: 50;
+  transform: translateX(100%); transition: transform .26s cubic-bezier(.4, 0, .2, 1);
+  overflow-y: auto; padding: 28px 28px 64px;
+}
+.drawer.on { transform: none; }
+.drawer-x {
+  position: sticky; top: 0; float: right; background: var(--panel);
+  border: 1px solid var(--rule); color: var(--ink-2); border-radius: 6px;
+  width: 30px; height: 30px; cursor: pointer; font-size: 16px; line-height: 1;
+}
+.drawer-x:hover { border-color: var(--accent); color: var(--ink); }
+.drawer-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drawer h2 { font-size: 25px; line-height: 1.2; margin: 8px 0 0; max-width: 30ch; }
+.drawer .d-id { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin-top: 8px; }
+.drawer .d-badges { margin-top: 14px; }
+.d-sec { margin-top: 26px; }
+.d-sec > .eyebrow { display: block; margin-bottom: 8px; }
+.d-prose { color: var(--ink-2); font-size: 14.5px; white-space: pre-wrap;
+  max-width: 62ch; margin: 0; }
+.d-prose strong { color: var(--ink); }
+
+.d-cap { background: var(--panel); border: 1px solid var(--rule);
+  border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.d-cap-h { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; flex-wrap: wrap; }
+.d-cap-h .n { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.req { border-top: 1px solid var(--rule); padding-top: 12px; margin-top: 12px; }
+.req .op { font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  color: var(--landed); border: 1px solid currentColor; border-radius: 3px;
+  padding: 1px 5px; margin-right: 8px; }
+.req .t { font-size: 14.5px; }
+.scen { list-style: none; margin: 10px 0 0; padding: 0; }
+.scen li { font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+  padding: 4px 0 4px 16px; position: relative; line-height: 1.45; }
+.scen li::before { content: "→"; position: absolute; left: 0; color: var(--ink-3); }
+
+.foot { border-top: 1px solid var(--rule); margin-top: 40px; padding: 24px 0 56px;
+  color: var(--ink-3); font-size: 12.5px; }
+.foot code { font-family: var(--mono); color: var(--ink-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+@media (max-width: 720px) {
+  .wave { padding-left: 0; }
+  .wave::before, .wave-dot { display: none; }
+  .wave-date { position: static; width: auto; text-align: left;
+    display: flex; gap: 8px; align-items: baseline; margin-top: 24px; }
+  .drawer { padding: 20px 18px 56px; }
+}
+</style>
+
+<header class="mast">
+  <div class="mast-in">
+    <div>
+      <span class="eyebrow" id="mast-eyebrow">architecture evolution</span>
+      <h1 id="mast-headline"></h1>
+      <p class="sub" id="mast-sub"></p>
+    </div>
+    <button class="themer" id="themer" type="button">Theme</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="stats" id="stats"></section>
+
+  <section class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Requirements under contract</h2>
+        <p>Cumulative requirements declared across the change log. The step is the commitment —
+           the shaded band is what has not archived yet.</p>
+      </div>
+      <span class="eyebrow" id="chart-legend"></span>
+    </div>
+    <div class="chart-scroll"><canvas id="accretion"></canvas></div>
+  </section>
+
+  <div class="controls">
+    <span class="eyebrow lbl">Filter</span>
+    <button class="chip" data-f="all" aria-pressed="true" type="button">All changes</button>
+    <button class="chip" data-f="archived" aria-pressed="false" type="button">Archived</button>
+    <button class="chip" data-f="open" aria-pressed="false" type="button">Open</button>
+    <button class="chip" data-f="wip" aria-pressed="false" type="button">Uncommitted</button>
+    <button class="chip" data-f="design" aria-pressed="false" type="button">Has design</button>
+    <button class="chip" data-f="probes" aria-pressed="false" type="button">Has probes</button>
+  </div>
+
+  <section class="spine" id="spine"></section>
+
+  <footer class="foot">
+    Derived from <code>openspec/changes/</code>, <code>openspec/specs/</code> and git history of
+    <code id="f-repo"></code> — proposals, spec deltas, task ledgers and archive state.
+    Dates are first-commit dates; uncommitted changes are dated by file mtime.
+    Generated <span id="f-date"></span>.
+  </footer>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="d-title"></aside>
+
+<script>
+const M = JSON.parse(document.getElementById("model").textContent);
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---- hero thesis (data-driven; may be model-authored) ---- */
+$("#mast-eyebrow").textContent = M.repo + " · architecture evolution";
+$("#mast-headline").textContent = M.thesis.headline;
+$("#mast-sub").textContent = M.thesis.subhead;
+
+/* ---- derived facts ---- */
+const totReq = M.changes.reduce((n, c) => n + c.reqCount, 0);
+const totScen = M.changes.reduce((n, c) => n + c.scenarioCount, 0);
+const caps = new Set(M.changes.flatMap((c) => c.capabilities.map((x) => x.name)));
+const tDone = M.changes.reduce((n, c) => n + c.tasks.done, 0);
+const tAll = M.changes.reduce((n, c) => n + c.tasks.total, 0);
+const archived = M.changes.filter((c) => c.archived).length;
+
+$("#stats").innerHTML = [
+  [M.changes.length, "changes proposed"],
+  [caps.size, "capabilities touched"],
+  [totReq, "requirements added", true],
+  [totScen, "WHEN/THEN scenarios"],
+  [tDone + "/" + tAll, "tasks complete"],
+  [archived + "/" + M.changes.length, "archived"],
+].map(([n, k, acc]) =>
+  `<div class="stat"><div class="n${acc ? " acc" : ""}">${n}</div>
+   <div class="k eyebrow">${k}</div></div>`).join("");
+
+$("#f-repo").textContent = M.repo;
+$("#f-date").textContent = M.generated;
+
+/* ---- theme ---- */
+const root = document.documentElement;
+$("#themer").addEventListener("click", () => {
+  const dark = getComputedStyle(root).getPropertyValue("--ground").trim().toLowerCase() === "#101720";
+  root.setAttribute("data-theme", dark ? "light" : "dark");
+  drawChart();
+});
+
+/* ---- chart: cumulative requirements, archived vs open ---- */
+const cv = $("#accretion");
+function drawChart() {
+  const cs = getComputedStyle(root);
+  const col = (n) => cs.getPropertyValue(n).trim();
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const x = cv.getContext("2d");
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+
+  const pad = { l: 42, r: 16, t: 14, b: 30 };
+  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+
+  // cumulative series by change order
+  let cum = 0, cumA = 0;
+  const pts = M.changes.map((c, i) => {
+    cum += c.reqCount;
+    if (c.archived) cumA += c.reqCount;
+    return { i, cum, cumA, c };
+  });
+  const max = Math.ceil(cum / 10) * 10;
+  const px = (i) => pad.l + (pts.length === 1 ? iw / 2 : (i / (pts.length - 1)) * iw);
+  const py = (v) => pad.t + ih - (v / max) * ih;
+
+  // grid
+  x.strokeStyle = col("--rule"); x.fillStyle = col("--ink-3");
+  x.lineWidth = 1; x.font = '11px ui-monospace, "SF Mono", Menlo, monospace';
+  for (let g = 0; g <= max; g += max / 4) {
+    const y = Math.round(py(g)) + .5;
+    x.beginPath(); x.moveTo(pad.l, y); x.lineTo(w - pad.r, y); x.stroke();
+    x.textAlign = "right"; x.textBaseline = "middle";
+    x.fillText(String(g), pad.l - 8, y);
+  }
+
+  // open band (total) then archived band on top
+  const band = (key, fill) => {
+    x.beginPath();
+    x.moveTo(px(0), py(0));
+    pts.forEach((p) => x.lineTo(px(p.i), py(p[key])));
+    x.lineTo(px(pts.length - 1), py(0));
+    x.closePath(); x.fillStyle = fill; x.fill();
+  };
+  const hexA = (hex, a) => {
+    const m = hex.replace("#", "");
+    const v = m.length === 3 ? m.split("").map((c) => c + c).join("") : m;
+    const n = parseInt(v, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  };
+  band("cum", hexA(col("--accent"), .14));
+  band("cumA", hexA(col("--landed"), .3));
+
+  // step lines
+  const line = (key, stroke, width) => {
+    x.beginPath();
+    pts.forEach((p, i) => (i ? x.lineTo(px(p.i), py(p[key])) : x.moveTo(px(p.i), py(p[key]))));
+    x.strokeStyle = stroke; x.lineWidth = width; x.lineJoin = "round"; x.stroke();
+  };
+  line("cum", col("--accent"), 2);
+  line("cumA", col("--landed"), 1.5);
+
+  // markers, endpoint emphasized
+  pts.forEach((p, i) => {
+    const last = i === pts.length - 1;
+    x.beginPath(); x.arc(px(p.i), py(p.cum), last ? 5 : 3, 0, Math.PI * 2);
+    x.fillStyle = p.c.committed ? col("--accent") : col("--flight");
+    x.fill();
+    if (last) { x.strokeStyle = col("--panel"); x.lineWidth = 2; x.stroke(); }
+  });
+
+  // endpoint label
+  const lastP = pts[pts.length - 1];
+  x.fillStyle = col("--ink"); x.textAlign = "right"; x.textBaseline = "bottom";
+  x.font = '600 12px ui-monospace, "SF Mono", Menlo, monospace';
+  x.fillText(lastP.cum + " reqs", px(lastP.i) - 2, py(lastP.cum) - 8);
+
+  // x labels: first + date changes
+  x.font = '11px ui-monospace, "SF Mono", Menlo, monospace';
+  x.fillStyle = col("--ink-3"); x.textAlign = "center"; x.textBaseline = "top";
+  let seen = null;
+  pts.forEach((p) => {
+    if (p.c.date !== seen) {
+      seen = p.c.date;
+      x.fillText(p.c.date.slice(5), px(p.i), h - pad.b + 8);
+    }
+  });
+}
+$("#chart-legend").innerHTML =
+  '<span style="color:var(--accent)">●</span> declared &nbsp; ' +
+  '<span style="color:var(--landed)">●</span> archived &nbsp; ' +
+  '<span style="color:var(--flight)">●</span> uncommitted';
+
+/* ---- timeline ---- */
+let filter = "all";
+const match = (c) => ({
+  all: true, archived: c.archived, open: !c.archived,
+  wip: !c.committed, design: c.hasDesign, probes: c.hasProbes,
+}[filter]);
+
+function renderSpine() {
+  const rows = M.changes.filter(match);
+  const byDate = {};
+  rows.forEach((c) => (byDate[c.date] ??= []).push(c));
+  const dates = Object.keys(byDate).sort();
+
+  $("#spine").innerHTML = dates.length === 0
+    ? '<p style="color:var(--ink-3);padding:32px 0">No changes match this filter.</p>'
+    : dates.map((d) => {
+      const list = byDate[d];
+      const wip = list.every((c) => !c.committed);
+      return `<div class="wave${wip ? " wip" : ""}">
+        <div class="wave-date"><div class="d">${d}</div>
+          <div class="c">${list.length} change${list.length > 1 ? "s" : ""}</div></div>
+        <span class="wave-dot"></span>
+        ${list.map(card).join("")}
+      </div>`;
+    }).join("");
+
+  document.querySelectorAll(".card").forEach((el) =>
+    el.addEventListener("click", () => openDrawer(el.dataset.id)));
+}
+
+function card(c) {
+  const pct = c.tasks.total ? Math.round((c.tasks.done / c.tasks.total) * 100) : 0;
+  const state = c.archived
+    ? '<span class="badge b-landed">archived</span>'
+    : (!c.committed ? '<span class="badge b-wip">uncommitted</span>'
+                    : '<span class="badge b-open">open</span>');
+  return `<button class="card" data-id="${esc(c.id)}" type="button">
+    <div class="card-top">
+      <div style="flex:1;min-width:240px">
+        <h3>${esc(c.title)}</h3>
+        <div class="id">${esc(c.id)}</div>
+      </div>
+      <div class="badges">${state}
+        ${c.hasDesign ? '<span class="badge b-open">design</span>' : ""}
+        ${c.hasProbes ? '<span class="badge b-open">probes</span>' : ""}</div>
+    </div>
+    ${c.why ? `<p class="why">${esc(c.why.replace(/\s+/g, " "))}</p>` : ""}
+    <div class="caps">${c.capabilities.map((x) =>
+      `<span class="cap">${esc(x.name)}</span>`).join("")}</div>
+    <div class="metrics">
+      <span class="metric"><span class="v">${c.reqCount}</span><span class="l">requirements</span></span>
+      <span class="metric"><span class="v">${c.scenarioCount}</span><span class="l">scenarios</span></span>
+      <span class="metric"><span class="v">${c.tasks.done}/${c.tasks.total}</span><span class="l">tasks</span></span>
+      <span class="bar${pct < 100 ? " part" : ""}"><i style="width:${pct}%"></i></span>
+    </div>
+  </button>`;
+}
+
+/* ---- drawer ---- */
+const drawer = $("#drawer"), scrim = $("#scrim");
+let lastFocus = null;
+
+function openDrawer(id) {
+  const c = M.changes.find((x) => x.id === id);
+  if (!c) return;
+  lastFocus = document.activeElement;
+  drawer.innerHTML = `
+    <button class="drawer-x" id="d-x" type="button" aria-label="Close">×</button>
+    <span class="eyebrow">${c.date}${c.committed ? "" : " · uncommitted"}</span>
+    <h2 id="d-title">${esc(c.title)}</h2>
+    <div class="d-id">${esc(c.id)}</div>
+    <div class="badges d-badges">
+      ${c.archived ? '<span class="badge b-landed">archived</span>'
+                   : '<span class="badge b-open">open</span>'}
+      <span class="badge b-open">${c.reqCount} reqs</span>
+      <span class="badge b-open">${c.scenarioCount} scenarios</span>
+      <span class="badge ${c.tasks.done === c.tasks.total ? "b-landed" : "b-wip"}">
+        ${c.tasks.done}/${c.tasks.total} tasks</span>
+    </div>
+    ${c.why ? `<div class="d-sec"><span class="eyebrow">Why</span>
+      <p class="d-prose">${esc(c.why)}</p></div>` : ""}
+    ${c.what ? `<div class="d-sec"><span class="eyebrow">What changes</span>
+      <p class="d-prose">${esc(c.what)}</p></div>` : ""}
+    <div class="d-sec">
+      <span class="eyebrow">Spec deltas — ${c.capabilities.length}
+        capabilit${c.capabilities.length > 1 ? "ies" : "y"}</span>
+      ${c.capabilities.map((cap) => `
+        <div class="d-cap">
+          <div class="d-cap-h"><span class="n">${esc(cap.name)}</span>
+            <span class="eyebrow">${cap.requirements.length} requirements</span></div>
+          ${cap.requirements.map((r) => `
+            <div class="req">
+              <div class="t"><span class="op">${esc(r.op)}</span>${esc(r.title)}</div>
+              ${r.scenarios.length ? `<ul class="scen">${r.scenarios.map((s) =>
+                `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+            </div>`).join("")}
+        </div>`).join("")}
+    </div>`;
+  drawer.classList.add("on"); scrim.classList.add("on");
+  $("#d-x").addEventListener("click", closeDrawer);
+  $("#d-x").focus();
+}
+function closeDrawer() {
+  drawer.classList.remove("on"); scrim.classList.remove("on");
+  if (lastFocus) lastFocus.focus();
+}
+scrim.addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => e.key === "Escape" && closeDrawer());
+
+/* ---- filters ---- */
+document.querySelectorAll(".chip").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".chip").forEach((o) =>
+      o.setAttribute("aria-pressed", String(o === b)));
+    filter = b.dataset.f;
+    renderSpine();
+  }));
+
+renderSpine();
+drawChart();
+addEventListener("resize", drawChart);
+</script>
