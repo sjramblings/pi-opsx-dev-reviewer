@@ -434,3 +434,11 @@ session-cost session *flags:
 # the recurring signal; does not re-log every call (pi's session jsonl already has those).
 tool-events *flags:
     @bun tools/assess-tool-events.ts {{flags}}
+
+# Render the architecture-evolution timeline for an OpenSpec repo (default: this one) to
+# <repo>/architecture-evolution.html — a self-contained interactive page derived from
+# openspec/changes + archive + specs + git history. The hero thesis is computed from the
+# data; to have a model sharpen it, run the evolution-narrator agent (it writes thesis.json)
+# then: bun tools/evolution-timeline.ts <repo> --thesis thesis.json
+evolution-timeline repo=".":
+    @bun tools/evolution-timeline.ts {{repo}}
