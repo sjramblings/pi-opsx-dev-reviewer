@@ -5,14 +5,14 @@
 
 ## 1. Shared theme
 
-- [ ] 1.1 Extract the evolution-timeline design tokens into `tools/lib/theme.css` — the `:root`
+- [x] 1.1 Extract the evolution-timeline design tokens into `tools/lib/theme.css` — the `:root`
       token set, fonts, light and dark palettes — with no behavioural change.
       files: `tools/lib/theme.css`
       probe: the token set matches the values currently in `evolution-timeline.template.html`; the file has both light and dark palettes.
       out-of-scope: changing any token value or the visual design.
       spec: `shared-theme`
 
-- [ ] 1.2 Make `evolution-timeline.template.html` inline the shared theme instead of its own
+- [x] 1.2 Make `evolution-timeline.template.html` inline the shared theme instead of its own
       copy, and confirm the rendered timeline is visually identical.
       files: `tools/evolution-timeline.template.html`, `tools/evolution-timeline.ts`
       probe: `bun tools/evolution-timeline.ts` renders; a visual check confirms parity with the pre-change output; no external references introduced.
@@ -21,7 +21,7 @@
 
 ## 2. The markdown renderer
 
-- [ ] 2.1 Write a zero-dependency focused markdown renderer covering the constructs the
+- [x] 2.1 Write a zero-dependency focused markdown renderer covering the constructs the
       architecture-writer emits: ATX headings, dash lists, pipe tables, inline code, links,
       emphasis. Test-driven against the actual generated tree.
       files: `tools/architecture-html.ts`, `tools/architecture-html.test.ts`
@@ -31,7 +31,7 @@
 
 ## 3. The HTML template and render
 
-- [ ] 3.1 Add `tools/architecture.template.html` — masthead with provenance and quality-goal
+- [x] 3.1 Add `tools/architecture.template.html` — masthead with provenance and quality-goal
       thesis, sticky section nav, stat tiles, styled HLD/LLD crosswalk, theme toggle — inlining
       the shared theme, with a single `__MODEL__` injection point.
       files: `tools/architecture.template.html`
@@ -39,7 +39,7 @@
       out-of-scope: interactivity beyond theme toggle and section navigation.
       spec: `architecture-doc`, `shared-theme`
 
-- [ ] 3.2 Complete `tools/architecture-html.ts` — read `docs/architecture/*.md`, build the
+- [x] 3.2 Complete `tools/architecture-html.ts` — read `docs/architecture/*.md`, build the
       section model, inject at `__MODEL__` (escape `</script`, fail loud if absent), write a
       deterministic self-contained `docs/architecture/index.html`.
       files: `tools/architecture-html.ts`
@@ -49,7 +49,7 @@
 
 ## 4. Gate and workflow
 
-- [ ] 4.1 Add the HTML-freshness check to `arch-lint`: re-render the markdown in memory and
+- [x] 4.1 Add the HTML-freshness check to `arch-lint`: re-render the markdown in memory and
       compare against the committed `index.html`; a mismatch or a missing render is a `FAIL`.
       Keep the three-state contract.
       files: `tools/arch-lint.ts`
@@ -57,7 +57,7 @@
       out-of-scope: gating the HTML for content — the markdown is the content gate.
       spec: `arch-lint`
 
-- [ ] 4.2 Add a `just architecture-html` recipe and a render step to the architecture-writer
+- [x] 4.2 Add a `just architecture-html` recipe and a render step to the architecture-writer
       method so the HTML is produced in every generation run.
       files: `justfile.opsx`, `agents/architecture-writer.md`
       probe: `just architecture-html` renders; the agent method names the render step after the markdown; `just arch-lint` includes the freshness check in its output.
@@ -66,7 +66,7 @@
 
 ## 5. Ship + dogfood
 
-- [ ] 5.1 Ship the new tool and asset in `install.sh`, render the real
+- [x] 5.1 Ship the new tool and asset in `install.sh`, render the real
       `docs/architecture/index.html`, and pass `just arch-lint` clean including freshness.
       files: `install.sh`, `docs/architecture/index.html`
       probe: `install.sh --here` copies `architecture-html.ts`, `architecture.template.html`, and `tools/lib/theme.css`; `just arch-lint` reports clean with the freshness check green; the rendered page opens offline and matches the markdown.

@@ -73,8 +73,11 @@ install_project() {
   cp "$HERE"/tools/select-learnings.ts "$HERE"/tools/audit-learnings.ts \
      "$HERE"/tools/trust.ts "$HERE"/tools/verify-goals.ts "$HERE"/tools/session-cost.ts \
      "$HERE"/tools/assess-tool-events.ts "$HERE"/tools/waf-grounding.ts \
-     "$HERE"/tools/arch-lint.ts "$HERE"/tools/pylib.ts "$TARGET/tools/"
-  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, pylib)"
+     "$HERE"/tools/arch-lint.ts "$HERE"/tools/pylib.ts \
+     "$HERE"/tools/architecture-html.ts "$HERE"/tools/architecture.template.html "$TARGET/tools/"
+  mkdir -p "$TARGET/tools/lib"
+  cp "$HERE"/tools/lib/theme.ts "$HERE"/tools/lib/theme.css "$TARGET/tools/lib/"
+  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, pylib, architecture-html + template + shared theme)"
 
   # 3. OpenSpec dev-reviewer schema + config. A repo has exactly ONE schema; if this repo
   #    already uses a different one, the dev-reviewer apply flow is mutually exclusive with

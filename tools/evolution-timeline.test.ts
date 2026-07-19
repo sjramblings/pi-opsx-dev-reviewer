@@ -84,18 +84,18 @@ const model: Model = {
 };
 
 test("render injects the model at the single injection point", () => {
-  const out = render("<x>__MODEL__</x>", model);
+  const out = render("<style>__THEME__</style><x>__MODEL__</x>", model);
   expect(out).toContain('"repo":"r"');
   expect(out).not.toContain("__MODEL__");
 });
 
 test("render throws when the template lacks the injection point", () => {
-  expect(() => render("<x>no slot</x>", model)).toThrow(/injection point/);
+  expect(() => render("<style>__THEME__</style><x>no slot</x>", model)).toThrow(/injection point/);
 });
 
 test("render neutralises a script terminator hidden in model content", () => {
   const evil: Model = { ...model, repo: "</script><script>alert(1)</script>" };
-  const out = render("<x>__MODEL__</x>", evil);
+  const out = render("<style>__THEME__</style><x>__MODEL__</x>", evil);
   // the raw closing sequence must not survive intact inside the data block
   expect(out).not.toContain("</script><script>alert(1)");
   expect(out).toContain("<\\/script");

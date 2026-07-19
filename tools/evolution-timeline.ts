@@ -18,6 +18,7 @@ import { readdirSync, readFileSync, existsSync, statSync, writeFileSync } from "
 import { join, basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { inlineTheme } from "./lib/theme.ts";
 
 // ---------- types ----------
 
@@ -209,7 +210,7 @@ export function render(template: string, model: Model): string {
   if (!template.includes("__MODEL__")) {
     throw new Error("template is missing the __MODEL__ injection point");
   }
-  return template.replace("__MODEL__", () => safe);
+  return inlineTheme(template).replace("__MODEL__", () => safe);
 }
 
 function loadThesis(path: string): Thesis | null {

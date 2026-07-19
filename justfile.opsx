@@ -38,9 +38,19 @@ waf-grounding *args:
     set -euo pipefail
     bun tools/waf-grounding.ts {{args}}
 
+# Render docs/architecture/ (the arc42 markdown tree) to a self-contained, themed
+# docs/architecture/index.html. Markdown stays the source of truth; this is a derived,
+# deterministic render sharing one theme with the evolution timeline. Re-run after any
+# change to the tree, or arch-lint's freshness check will fail.
+architecture-html tree="docs/architecture":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bun tools/architecture-html.ts {{tree}}
+
 # Lint the generated architecture tree. Like docs-lint, this reports FAIL for real
 # violations, PARTIAL when an optional lookup tool/source is missing, and clean only
-# when every check ran. An absent tree is not a clean state.
+# when every check ran. An absent tree is not a clean state. Includes an html-freshness
+# check: docs/architecture/index.html must be a current render of the markdown.
 arch-lint:
     #!/usr/bin/env bash
     set -uo pipefail

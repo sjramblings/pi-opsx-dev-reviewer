@@ -27,6 +27,7 @@ import {
   stripChars,
   isRelativeTo,
 } from "./pylib.ts";
+import { renderTree } from "./architecture-html.ts";
 
 const TREE = pyPath(process.argv[2] ?? "");
 const DECISIONS = pyPath(process.argv[3] ?? "");
@@ -993,6 +994,34 @@ function check42010Audit(): string[] {
   return local;
 }
 
+function checkHtmlFreshness(): string[] {
+  printCheck("html freshness");
+  const local: string[] = [];
+  const htmlPath = path.join(TREE, "index.html");
+  if (!exists(htmlPath)) {
+    local.push(`${htmlPath}: missing render — run 'just architecture-html'`);
+    failCheck("html freshness", local);
+    return local;
+  }
+  let fresh: string;
+  try {
+    fresh = renderTree(TREE);
+  } catch (err) {
+    // A render failure here is a symptom of an incomplete tree, which the section
+    // completeness check already reports. Surface it without double-counting the cause.
+    local.push(`could not render the tree for comparison: ${(err as Error).message}`);
+    failCheck("html freshness", local);
+    return local;
+  }
+  const committed = fs.readFileSync(htmlPath, "utf8");
+  if (committed !== fresh) {
+    local.push(`${htmlPath}: stale — not a current render of the markdown; run 'just architecture-html'`);
+  }
+  if (local.length > 0) failCheck("html freshness", local);
+  else passCheck("html freshness");
+  return local;
+}
+
 const checks = [
   checkStatedCost,
   checkBestPracticeIdentifiers,
@@ -1000,6 +1029,7 @@ const checks = [
   checkAdrExistence,
   checkSectionCompleteness,
   check42010Audit,
+  checkHtmlFreshness,
 ];
 for (const check of checks) failures.push(...check());
 

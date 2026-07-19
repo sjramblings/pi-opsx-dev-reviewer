@@ -46,9 +46,14 @@ technical-debt section; do not invent the rationale.
    crosswalk in `docs/architecture/README.md` that maps every arc42 section to the corresponding
    high-level-design and low-level-design engagement headings without restructuring the tree. If the
    corpus is unavailable, fail loudly instead of fabricating claims.
-8. Verify the generated tree with the project architecture gate when it exists, then quote
-   the exact command output. If no gate exists yet, state that explicitly and still re-read
-   the files you changed.
+8. After the markdown is written, render the self-contained HTML with
+   `just architecture-html` (or `bun tools/architecture-html.ts docs/architecture`). The
+   markdown is the source of truth; the HTML is a derived render, never hand-authored. The
+   render is part of every generation run, not an optional extra.
+9. Verify the generated tree with the project architecture gate when it exists, then quote
+   the exact command output. The gate includes an html-freshness check, so a missing or stale
+   `docs/architecture/index.html` fails it. If no gate exists yet, state that explicitly and
+   still re-read the files you changed.
 
 ## Your final report
 ```text
