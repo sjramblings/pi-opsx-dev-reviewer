@@ -13,6 +13,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import * as os from "node:os";
 import {
   fullmatch,
   globPrefix,
@@ -1022,6 +1023,130 @@ function checkHtmlFreshness(): string[] {
   return local;
 }
 
+// arc42 sections whose diagrams are load-bearing. Required: a missing Mermaid block fails.
+// Conventional: a missing block warns but does not fail. Every other section is prose/table.
+const DIAGRAM_REQUIRED = new Set([
+  "03-context-and-scope.md",
+  "05-building-block-view.md",
+  "07-deployment-view.md",
+]);
+const DIAGRAM_CONVENTIONAL = new Set([
+  "06-runtime-view.md",
+  "10-quality-requirements.md",
+]);
+
+function hasMermaidBlock(text: string): boolean {
+  return /```+\s*mermaid\b/i.test(text);
+}
+
+function checkDiagramPresence(): string[] {
+  printCheck("diagram presence");
+  const local: string[] = [];
+  for (const section of EXPECTED_SECTIONS) {
+    const p = path.join(TREE, section);
+    if (!exists(p)) continue; // section completeness owns missing files
+    const text = stripHtmlComments(readText(p));
+    if (hasMermaidBlock(text)) continue;
+    if (DIAGRAM_REQUIRED.has(section)) {
+      local.push(`${section}: no Mermaid diagram — this section requires one`);
+    } else if (DIAGRAM_CONVENTIONAL.has(section)) {
+      print(`diagram presence: WARN — ${section}: no Mermaid diagram (conventional, not required)`);
+    }
+  }
+  if (local.length > 0) failCheck("diagram presence", local);
+  else passCheck("diagram presence");
+  return local;
+}
+
+function mermaidValidator(): string[] | null {
+  // Prefer a validator on PATH; fall back to bunx-fetched maid so the check runs out of the box
+  // with bun. Returns the argv prefix (a file path is appended per block), or null when none is
+  // reachable (offline with nothing installed) so the check degrades to PARTIAL, never a false
+  // clean. Order matters: an installed binary beats a network fetch. Probed by validating a
+  // known-good diagram, since maid has no --version flag (it reads argv as file paths).
+  const probeFile = path.join(os.tmpdir(), `arch-lint-mmd-probe-${process.pid}.mmd`);
+  fs.writeFileSync(probeFile, "flowchart LR\n  a --> b\n");
+  try {
+    const candidates: string[][] = [["maid"], ["mmdc"], ["bunx", "--bun", "@probelabs/maid"]];
+    for (const cand of candidates) {
+      const isMmdc = cand[cand.length - 1] === "mmdc";
+      const argv = isMmdc
+        ? [...cand.slice(1), "-i", probeFile, "-o", `${probeFile}.svg`]
+        : [...cand.slice(1), probeFile];
+      const probe = spawnSync(cand[0], argv, { encoding: "utf8" });
+      if (!probe.error && probe.status === 0) return cand;
+    }
+    return null;
+  } finally {
+    try { fs.unlinkSync(probeFile); } catch { /* best effort */ }
+    try { fs.unlinkSync(`${probeFile}.svg`); } catch { /* best effort */ }
+  }
+}
+
+function extractMermaidBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  const lines = splitlines(text);
+  let i = 0;
+  while (i < lines.length) {
+    if (/```+\s*mermaid\b/i.test(lines[i].trim())) {
+      const body: string[] = [];
+      i++;
+      while (i < lines.length && !/^```+\s*$/.test(lines[i].trim())) { body.push(lines[i]); i++; }
+      blocks.push(body.join("\n"));
+    }
+    i++;
+  }
+  return blocks;
+}
+
+function checkDiagramSyntax(): string[] {
+  printCheck("diagram syntax");
+  const local: string[] = [];
+  const validator = mermaidValidator();
+  const jobs: Array<{ section: string; source: string }> = [];
+  for (const p of allMd) {
+    for (const source of extractMermaidBlocks(stripHtmlComments(readText(p)))) {
+      jobs.push({ section: path.basename(p), source });
+    }
+  }
+  if (jobs.length === 0) {
+    print("diagram syntax: ok (no Mermaid blocks found)");
+    return local;
+  }
+  if (!validator) {
+    skipped += 1;
+    print(`diagram syntax: SKIP — no Mermaid validator (maid or mmdc) installed (${jobs.length} block(s) unchecked)`);
+    return local;
+  }
+  for (const job of jobs) {
+    const tmp = path.join(os.tmpdir(), `arch-lint-mmd-${process.pid}-${Math.abs(hashString(job.source))}.mmd`);
+    fs.writeFileSync(tmp, job.source);
+    try {
+      const isMmdc = validator[validator.length - 1] === "mmdc";
+      const argv = isMmdc
+        ? [...validator.slice(1), "-i", tmp, "-o", `${tmp}.svg`]
+        : [...validator.slice(1), tmp];
+      const out = spawnSync(validator[0], argv, { encoding: "utf8" });
+      if (out.status !== 0) {
+        const detail = (out.stderr || out.stdout || "parse error").trim().split("\n")[0];
+        local.push(`${job.section}: invalid Mermaid — ${detail}`);
+      }
+    } finally {
+      try { fs.unlinkSync(tmp); } catch { /* best effort */ }
+      try { fs.unlinkSync(`${tmp}.svg`); } catch { /* best effort */ }
+    }
+  }
+  if (local.length > 0) failCheck("diagram syntax", local);
+  else passCheck("diagram syntax");
+  return local;
+}
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+  return h;
+}
+
 const checks = [
   checkStatedCost,
   checkBestPracticeIdentifiers,
@@ -1029,6 +1154,8 @@ const checks = [
   checkAdrExistence,
   checkSectionCompleteness,
   check42010Audit,
+  checkDiagramPresence,
+  checkDiagramSyntax,
   checkHtmlFreshness,
 ];
 for (const check of checks) failures.push(...check());

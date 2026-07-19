@@ -51,3 +51,17 @@ The `dev-reviewer` schema declares eight artifacts including `review-report`
 (`openspec/schemas/dev-reviewer/schema.yaml:119`). The `justfile.opsx` recipe suite provides
 the gates: `docs-lint:7`, `arch-lint:44`, `archive-check:63`, `check-extensions:245`,
 `verify-gate:285`.
+
+## Container diagram
+
+```mermaid
+flowchart TD
+  kit[pi-opsx-dev-reviewer]
+  kit --> agents[Agent role set - agents/]
+  kit --> ext[Guard extensions - extensions/]
+  kit --> tools[Deterministic engines - tools/]
+  kit --> schema[dev-reviewer schema + recipes]
+  ext --> fd[force-delegate]
+  ext --> as[architect-scope]
+  ext --> hs[harness-selftest]
+```

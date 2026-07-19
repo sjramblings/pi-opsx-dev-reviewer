@@ -10,6 +10,13 @@ Index `ADR` records by link only; never create, edit, or restate files under
      no repository-derived content, write `Not applicable — <one-line reason>.` under
      its H1 instead of omitting the file or leaving placeholder text. -->
 
+<!-- Diagram rule: a Mermaid diagram is REQUIRED in §3 Context and Scope (context diagram),
+     §5 Building Block View (container/component), and §7 Deployment View (deployment diagram);
+     EXPECTED in §6 Runtime View (sequenceDiagram) and §10 Quality Requirements (tree); and must
+     NOT appear in §2, §9, §11, §12. Required diagrams use stable `flowchart`/`sequenceDiagram`
+     primitives; `C4`/`mindmap` are experimental and optional only. `just arch-lint` fails on a
+     missing required diagram and on any diagram that does not parse. -->
+
 ## Index: `docs/architecture/README.md`
 
 ### Provenance

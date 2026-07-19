@@ -6,7 +6,7 @@
 
 ## 1. The agent
 
-- [ ] 1.1 Update `agents/architecture-writer.md`: a diagram method step and per-section guidance
+- [x] 1.1 Update `agents/architecture-writer.md`: a diagram method step and per-section guidance
       — require a Mermaid diagram in the context, building block, and deployment sections; expect
       one in runtime and quality; forbid one in constraints, decisions, risks, glossary; use
       stable `flowchart`/`sequenceDiagram` primitives, `C4`/`mindmap` opt-in only.
@@ -15,7 +15,7 @@
       out-of-scope: changing the ADR boundary or the derive-do-not-duplicate rule.
       spec: `architecture-doc`
 
-- [ ] 1.2 Add per-section diagram scaffolding to
+- [x] 1.2 Add per-section diagram scaffolding to
       `openspec/schemas/dev-reviewer/templates/architecture.md`.
       files: `openspec/schemas/dev-reviewer/templates/architecture.md`
       probe: the template marks §3/§5/§7 as diagram-required and §2/§9/§11/§12 as diagram-free.
@@ -24,14 +24,14 @@
 
 ## 2. Render Mermaid in the HTML
 
-- [ ] 2.1 Vendor a pinned Mermaid runtime build under `tools/lib/` and inline it in
+- [x] 2.1 Vendor a pinned Mermaid runtime build under `tools/lib/` and inline it in
       `architecture.template.html`; render `pre.mermaid` blocks on load, themed to match.
       files: `tools/lib/`, `tools/architecture.template.html`
       probe: `index.html` renders a Mermaid block as a diagram offline with no external request; the vendored build is a pinned version.
       out-of-scope: build-time SVG pre-rendering.
       spec: `architecture-doc`
 
-- [ ] 2.2 Emit Mermaid fences from the markdown renderer in `architecture-html.ts` as
+- [x] 2.2 Emit Mermaid fences from the markdown renderer in `architecture-html.ts` as
       `pre.mermaid` (not a `code` block), and keep the render deterministic (byte-identical on
       re-run) so the freshness check holds.
       files: `tools/architecture-html.ts`, `tools/architecture-html.test.ts`
@@ -41,14 +41,14 @@
 
 ## 3. Gate checks
 
-- [ ] 3.1 Add `diagram-presence` to `arch-lint`: fail on a missing Mermaid block in §3/§5/§7,
+- [x] 3.1 Add `diagram-presence` to `arch-lint`: fail on a missing Mermaid block in §3/§5/§7,
       warn for §6/§10, ignore the rest.
       files: `tools/arch-lint.ts`
       probe: a tree missing the building-block diagram fails and names it; a tree missing only the runtime diagram warns and passes; a prose-section diagram is not required.
       out-of-scope: syntax validation.
       spec: `arch-lint`
 
-- [ ] 3.2 Add `diagram-syntax` to `arch-lint`: run a Mermaid validator (`@probelabs/maid` or
+- [x] 3.2 Add `diagram-syntax` to `arch-lint`: run a Mermaid validator (`@probelabs/maid` or
       `mmdc`) over every block; fail on a parse error; `PARTIAL` when absent; never a false clean.
       files: `tools/arch-lint.ts`, `justfile.opsx`
       probe: an invalid Mermaid block fails and names the parse error; with no validator installed the check reports PARTIAL; a valid tree passes.
@@ -57,7 +57,7 @@
 
 ## 4. Bash path-gate (runs alone)
 
-- [ ] 4.1 Extend `architect-scope` to apply a scoped agent's path policy to write-capable shell,
+- [x] 4.1 Extend `architect-scope` to apply a scoped agent's path policy to write-capable shell,
       reusing the `force-delegate` bash-parsing approach: block a shell write outside the agent's
       prefixes, allow read-only/in-scope shell, block on parse uncertainty. String methods only —
       no regex literals, backticks, or apostrophes.
@@ -75,7 +75,7 @@
 
 ## 5. Ship + dogfood
 
-- [ ] 5.1 Ship the Mermaid validator setup (a `docs-lint-setup`-style step) and the vendored
+- [x] 5.1 Ship the Mermaid validator setup (a `docs-lint-setup`-style step) and the vendored
       runtime in `install.sh`; add the required diagrams to this repo's own `docs/architecture/`
       tree; pass `just arch-lint` clean including the two diagram checks.
       files: `install.sh`, `docs/architecture/**`, `justfile.opsx`

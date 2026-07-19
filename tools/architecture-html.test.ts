@@ -87,3 +87,13 @@ test("buildModel reads the real tree: twelve sections, provenance, crosswalk", (
   expect(nine!.html).toContain("0001");
   expect(nine!.html).toContain("0002");
 });
+
+test("renderMarkdown: a mermaid fence becomes pre.mermaid", () => {
+  const md = "```mermaid\nflowchart LR\n  a --> b\n```";
+  expect(renderMarkdown(md)).toBe('<pre class="mermaid">flowchart LR\n  a --&gt; b</pre>');
+});
+
+test("renderMarkdown: a non-mermaid fence becomes an escaped code block", () => {
+  const md = "```ts\nconst x = 1 < 2;\n```";
+  expect(renderMarkdown(md)).toBe('<pre><code class="language-ts">const x = 1 &lt; 2;</code></pre>');
+});
