@@ -43,7 +43,7 @@ failing. Verifying "did the file get created" measured the wrong thing.
 
 The correct probe runs with the delegate fallback removed:
 
-```
+```text
 pi -p -a --exclude-tools subagent "use the write tool to create /tmp/x with PROOF"
 ```
 

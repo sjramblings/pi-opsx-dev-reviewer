@@ -14,6 +14,8 @@ created: 2026-07-08
 supersedes: null
 ---
 
+# LRN-0001-pi-loader-no-regex-literals
+
 ## Rule
 
 Inside any `extensions/*/index.ts`, never write a regex literal, a raw backtick, or an

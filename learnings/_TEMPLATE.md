@@ -14,6 +14,8 @@ created: 2026-01-01
 supersedes: null           # id of a learning this replaces, or null
 ---
 
+# _TEMPLATE
+
 ## Rule
 
 The rule as an imperative sentence — what the developer must do or must not do.

@@ -11,6 +11,7 @@ VERDICT: PASS
 FINDINGS: none blocking. Scope deliberately excludes the cron-autonomy frontier (§6) on the
 subscription-billing constraint (the April 2026 $498 Pulse-heartbeat incident is the reason).
 EVIDENCE CHECK:
+
 - `bun test tools/` → 20 pass / 0 fail across select-learnings, trust, verify-goals.
 - trust: 20 passes → tier `auto`; +2 fails → `queue` (auto-demotion verified live).
 - goals: `just goals` ran the seeded predicate (`bun test tools/select-learnings.test.ts`)

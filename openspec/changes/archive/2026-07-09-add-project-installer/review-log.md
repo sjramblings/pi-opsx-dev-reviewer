@@ -12,6 +12,7 @@ VERDICT: PASS
 FINDINGS: one real defect caught during verification and fixed (see below). Built outside
 the developer/reviewer delegation flow (noted).
 EVIDENCE CHECK:
+
 - `install.sh --here <tmp>` populated `.pi/extensions/` (6 guards), `tools/`, the schema +
   `openspec/config.yaml`, `AGENTS.md`, `learnings/`, and a `justfile` importing `justfile.opsx`.
 - `opsx-reminder`: `just check-extensions` clean + `bun build` clean; a synthetic

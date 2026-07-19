@@ -29,7 +29,7 @@ protection, agent, extension, and recipe, with usage — self-contained, opens s
 
 ## What's in the box
 
-```
+```text
 pi-opsx-dev-reviewer/
 ├── install.sh                        # bootstrap: ./install.sh (global) | --here [repo] (per-repo)
 ├── agents/
@@ -140,9 +140,11 @@ pi -p "Implement <X> with the developer agent, then have the reviewer agent
    is injected at artifact creation and `rules` are per-artifact — neither is
    guaranteed to reach the apply step, which is exactly why step 2 exists.)
 2. **Force** (the enforcers): install the project-scoped pieces into the repo:
+
    ```bash
    /path/to/pi-opsx-dev-reviewer/install.sh --here .
    ```
+
    This copies **all** extensions into `<repo>/.pi/extensions/`, the `tools/`, and the
    `dev-reviewer` schema, scaffolds `AGENTS.md` + `learnings/` + `goals/`, and wires the
    recipe `justfile.opsx` via an `import` — **non-destructively** (`cp -n`; never clobbers
@@ -216,9 +218,11 @@ invariants live in `AGENTS.md`, path-scoped rules in `learnings/`, verdicts in `
   reviewer's `VERDICT: PASS …`.
 - Force proof (in a repo with the extension): remove the delegate fallback so a blocked
   write has nowhere to go, then confirm the main agent cannot write:
+
   ```bash
   pi -p -a --exclude-tools subagent "use the write tool to create /tmp/x with PROOF"
   ```
+
   → the agent reports the write was blocked and `/tmp/x` is never created. (Without
   `--exclude-tools subagent` the main agent is still blocked, but it delegates and the
   developer subagent does the write — so the file appearing is delegation working, not the

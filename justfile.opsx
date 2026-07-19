@@ -31,6 +31,29 @@ docs-lint:
     fi
     exit "$rc"
 
+# Regression guard: every shipped OpenSpec template must itself pass the docs floor, so an
+# artifact seeded from it starts lint-clean instead of pre-loaded with violations. Fails if a
+# template violates the floor; reports the count it scanned so it can never report a false clean.
+check-templates:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    dir="openspec/schemas/dev-reviewer/templates"
+    count=$(find "$dir" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$count" -eq 0 ]; then
+        echo "check-templates: no templates found in $dir — nothing checked"
+        exit 1
+    fi
+    # The repo config pins globs to **/*.md, so markdownlint scans everything; filter its
+    # output to the templates dir. A template-path violation fails the guard.
+    bunx --bun markdownlint-cli2 "$dir/*.md" >/tmp/check-templates.out 2>&1 || true
+    hits=$(grep -E "^$dir/.*\.md:" /tmp/check-templates.out || true)
+    if [ -n "$hits" ]; then
+        echo "check-templates: FAIL — a shipped template violates the docs floor:"
+        echo "$hits"
+        exit 1
+    fi
+    echo "check-templates: clean — $count template(s) pass the docs floor"
+
 # Resolve and scope Well-Architected best-practice claims from the synced corpus.
 # The default scope is HIGH-risk; pass `scope --full-sweep` to assess every risk.
 waf-grounding *args:

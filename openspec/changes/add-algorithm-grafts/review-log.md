@@ -11,6 +11,7 @@ VERDICT: PASS
 FINDINGS: none. Deliberately excluded the Algorithm's ceremony (tier/thinking floors,
 euphoric-surprise, 12-section ISA) as noted in the proposal.
 EVIDENCE CHECK:
+
 - Refutation: template + README + all three LRN-*.md carry `## Refutation` with the four fields.
 - Reproduce-first: the rule is present in AGENTS.md, the reviewer prompt, and the schema
   `tasks` instruction.

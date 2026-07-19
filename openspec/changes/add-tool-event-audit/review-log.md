@@ -11,6 +11,7 @@ FINDINGS: `check-extensions` caught a real load-breaker during the build — an 
 in `pi's` inside the new lib comment — which was fixed (the guard doing its job on its own
 new file). No other blocking findings.
 EVIDENCE CHECK:
+
 - `just check-extensions` clean (now lints `extensions/lib/*.ts`).
 - `bun build` on all four guards clean — the `../lib/tool-events` import resolves.
 - End-to-end: `developer-guard` blocked `rm -rf /a`, `rm -rf /b`, `sudo whoami` → three

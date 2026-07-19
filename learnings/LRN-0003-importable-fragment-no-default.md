@@ -14,6 +14,8 @@ created: 2026-07-09
 supersedes: null
 ---
 
+# LRN-0003-importable-fragment-no-default
+
 ## Rule
 
 Any file installed to be `import`ed into a host justfile (`justfile.opsx`) must contain only

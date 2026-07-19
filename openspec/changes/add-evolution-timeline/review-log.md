@@ -23,6 +23,7 @@ single task.
 VERDICT: PASS
 FINDINGS: none blocking.
 EVIDENCE CHECK:
+
 - `bun test tools/` → 40 pass / 0 fail (9 new tests exercise parseDelta op-detection,
   parseTasks ledger counting, computeThesis accretion-vs-reshaping branches and the
   non-empty invariant, and render's injection-point + script-terminator guards).
