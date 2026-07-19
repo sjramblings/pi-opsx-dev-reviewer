@@ -44,9 +44,17 @@ check-templates:
         exit 1
     fi
     # The repo config pins globs to **/*.md, so markdownlint scans everything; filter its
-    # output to the templates dir. A template-path violation fails the guard.
-    bunx --bun markdownlint-cli2 "$dir/*.md" >/tmp/check-templates.out 2>&1 || true
-    hits=$(grep -E "^$dir/.*\.md:" /tmp/check-templates.out || true)
+    # output to the templates dir. markdownlint-cli2 exits 0 (clean), 1 (lint errors found),
+    # or >=2 (it could not run — bad config, launch failure). Only a clean templates dir is a
+    # pass: template-path violations fail, and a >=2 tool abort fails too, so a launch failure
+    # never masquerades as the false clean this guard exists to prevent.
+    out=$(bunx --bun markdownlint-cli2@0.23.1 "$dir/*.md" 2>&1); rc=$?
+    hits=$(printf '%s\n' "$out" | grep -E "^$dir/.*\.md:" || true)
+    if [ "$rc" -ge 2 ]; then
+        echo "check-templates: FAIL — markdownlint could not run (exit $rc):"
+        printf '%s\n' "$out" | tail -5
+        exit 1
+    fi
     if [ -n "$hits" ]; then
         echo "check-templates: FAIL — a shipped template violates the docs floor:"
         echo "$hits"
