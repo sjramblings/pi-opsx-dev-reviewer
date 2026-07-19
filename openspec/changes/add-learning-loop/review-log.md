@@ -14,6 +14,7 @@ flow.
 VERDICT: PASS
 FINDINGS: none blocking. Built outside the developer/reviewer delegation flow (noted).
 EVIDENCE CHECK:
+
 - `bun test tools/select-learnings.test.ts` → 9 pass / 0 fail (scope match, status filter,
   no-false-positive, cold-start, rename, cap, ordering, frontmatter).
 - live selection: matching diff selects LRN-0001 with a trace line; non-matching diff

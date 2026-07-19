@@ -28,6 +28,7 @@ here" today reads ten folders by hand.
 ## Capabilities
 
 ### New Capabilities
+
 - `evolution-timeline`: extract an architecture-evolution model from an OpenSpec repo and
   render it as a self-contained interactive HTML page, with an optional model-authored
   thesis that never gates the deterministic output.

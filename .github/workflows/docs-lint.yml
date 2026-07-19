@@ -1,0 +1,38 @@
+name: docs-lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/docs-lint.yml"
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".markdownlint-cli2.jsonc"
+      - ".github/workflows/docs-lint.yml"
+
+jobs:
+  markdownlint-floor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up just
+        uses: extractions/setup-just@v3
+
+      # The settled floor in .markdownlint-cli2.jsonc, over the whole repo. Every rule that
+      # fires is decided in that config; a violation fails the build and names the file + rule.
+      # Pinned: an unpinned release could add a default-on rule and fail an unchanged repo, or
+      # silently shift the supposedly settled floor, with no config change.
+      - name: markdownlint floor
+        run: bunx --bun markdownlint-cli2@0.23.1 "**/*.md"
+
+      # Regression guard: a shipped OpenSpec template must itself pass the floor, so an artifact
+      # seeded from it starts clean. Fails if a template regresses.
+      - name: template guard
+        run: just check-templates

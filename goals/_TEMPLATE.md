@@ -1,3 +1,5 @@
+# Goal — _TEMPLATE
+
 predicate: <shell command; exit 0 = the invariant still holds; cheap, deterministic, read-only>
 born: 2026-01-01
 source: <change or PR this graduated from>

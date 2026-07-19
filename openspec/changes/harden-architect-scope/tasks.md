@@ -1,3 +1,5 @@
+# Tasks — harden-architect-scope
+
 ## 1. Invert architect-scope to default-deny
 
 - [x] 1.1 Rewrite the decision in `extensions/architect-scope/index.ts` so that `write`/`edit`

@@ -1,19 +1,32 @@
 {
-  // Docs structural rules for the kit. Errors here are the non-negotiable floor;
-  // everything not listed keeps its markdownlint default.
+  // The docs floor for the kit — every rule that fires against this repo is decided here,
+  // explicitly true (wanted) or false (not), with a reason. No rule governs the repo by
+  // inheriting a markdownlint default; if a new rule starts firing, it gets a line here.
   "config": {
+    // Structure — chosen from the start.
     "MD001": true,   // headings increment one level at a time
     "MD003": { "style": "atx" },
     "MD004": { "style": "dash" },
-    "MD013": false,  // no hard line-length cap — prose wraps naturally
     "MD024": { "siblings_only": true },
     "MD025": true,   // one H1 per document
-    "MD033": false,  // inline HTML allowed (details/callout)
     "MD040": true,   // fenced code blocks must declare a language
     "MD041": true,   // first line is a top-level heading
     "MD042": true,   // no empty links
     "MD051": true,   // link fragments resolve to real headings
-    "MD059": true    // descriptive link text — no "click here"
+    "MD059": true,   // descriptive link text — no "click here"
+
+    // Whitespace hygiene — adopted deliberately (was inherited before this change). Free to
+    // satisfy once the templates emit it, and it keeps generated markdown consistent.
+    "MD007": { "indent": 2 },  // unordered-list indent is two spaces
+    "MD012": true,   // no multiple consecutive blank lines
+    "MD022": true,   // headings surrounded by blank lines
+    "MD031": true,   // fenced code blocks surrounded by blank lines
+    "MD032": true,   // lists surrounded by blank lines
+    "MD060": true,   // consistent table pipe spacing
+
+    // Deliberately off.
+    "MD013": false,  // no hard line-length cap — prose wraps naturally
+    "MD033": false   // inline HTML allowed (details/callout, index.html snippets)
   },
   "globs": ["**/*.md"],
   "ignores": ["node_modules", ".git"]

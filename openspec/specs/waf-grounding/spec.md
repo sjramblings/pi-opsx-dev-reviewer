@@ -1,8 +1,11 @@
 # waf-grounding Specification
 
 ## Purpose
+
 TBD - created by archiving change add-architecture-writer. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Well-Architected claims resolve against a pinned corpus
 
 Every Well-Architected best-practice identifier written into the architecture tree SHALL resolve
@@ -58,4 +61,3 @@ generation time and SHALL stamp it with the corpus tag. It SHALL NOT attribute a
 
 - **WHEN** the tree states how many best practices were assessed
 - **THEN** the figure is derived from the synced corpus and carries the corpus tag it came from
-

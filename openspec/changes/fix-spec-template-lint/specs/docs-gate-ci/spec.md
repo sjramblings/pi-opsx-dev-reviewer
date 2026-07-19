@@ -2,41 +2,43 @@
 
 ## ADDED Requirements
 
-### Requirement: The docs gate runs in CI
+### Requirement: The markdownlint floor runs in CI
 
-A CI workflow SHALL install the docs-lint tools and run `just docs-lint` on every push and pull
-request affecting markdown, and SHALL fail the build when the gate does not report clean.
+A CI workflow SHALL run the markdownlint floor (the settled `.markdownlint-cli2.jsonc`) and the
+template guard on every push and pull request affecting markdown, and SHALL fail the build when
+either does not report clean. This is the gate this change settled and cleared to zero; the
+other `docs-lint` tools (Vale, cspell, lychee) are wired incrementally as their content is
+cleaned, tracked as a follow-up.
 
 #### Scenario: A lint regression fails the build
 
-- **WHEN** a pull request introduces a markdown file that violates the chosen floor
+- **WHEN** a pull request introduces a markdown file that violates the settled floor
 - **THEN** the workflow exits non-zero and names the file and rule
 
 #### Scenario: A clean tree passes
 
-- **WHEN** every markdown file passes the chosen floor and every tool ran
+- **WHEN** every markdown file passes the settled floor and the templates pass the guard
 - **THEN** the workflow reports success
 
-### Requirement: PARTIAL is a failure in CI
+### Requirement: A template regression fails the build in CI
 
-The CI workflow SHALL treat a `PARTIAL` result as a failure, because the workflow installs the
-tools and a skip therefore means the gate broke. Local runs SHALL keep the existing three-state
-behaviour so a missing tool does not block work on a laptop.
+The CI workflow SHALL run `just check-templates`, so a shipped OpenSpec template that emits
+gate-rejecting output fails the build rather than being discovered later.
 
-#### Scenario: A missing tool in CI stops the build
+#### Scenario: A regressed template fails CI
 
-- **WHEN** a docs-lint tool fails to install and the recipe reports `PARTIAL`
-- **THEN** the workflow exits non-zero rather than treating the skip as a pass
+- **WHEN** a template is edited so its output no longer passes the settled floor
+- **THEN** the workflow exits non-zero and names the template
+
+### Requirement: The local gate keeps its three-state behaviour
+
+`just docs-lint` SHALL keep the existing three-state behaviour so a missing tool does not block
+work on a laptop, and SHALL NOT report clean when it checked nothing.
 
 #### Scenario: A local run still degrades gracefully
 
 - **WHEN** `just docs-lint` runs on a machine with no tools installed
 - **THEN** it reports `PARTIAL` naming the skipped count and does not report clean, exactly as before
-
-### Requirement: The gate reports what it checked
-
-`just docs-lint` SHALL NOT report clean when it checked nothing, and the CI workflow SHALL surface
-which tools ran.
 
 #### Scenario: An empty scan is not a clean scan
 

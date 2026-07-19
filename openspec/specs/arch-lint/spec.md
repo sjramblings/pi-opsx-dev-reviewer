@@ -1,8 +1,11 @@
 # arch-lint Specification
 
 ## Purpose
+
 TBD - created by archiving change add-architecture-writer. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The gate enforces stated cost
 
 `just arch-lint` SHALL fail when a decision reference or a pattern claim in the architecture tree
@@ -111,4 +114,3 @@ carrying no wall-clock or unordered iteration, so a matching HTML never flaps to
 
 - **WHEN** `just arch-lint` runs twice against an unchanged tree with a current HTML
 - **THEN** both runs report the freshness check clean
-
