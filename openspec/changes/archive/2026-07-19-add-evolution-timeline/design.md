@@ -1,3 +1,5 @@
+# Design — add-evolution-timeline
+
 ## Context
 
 The kit already treats `openspec/changes/` as the unit of work and ships tools that read
@@ -10,12 +12,14 @@ requirements, zero retractions, most still in flight" — was a judgment call.
 ## Goals / Non-Goals
 
 **Goals:**
+
 - A repeatable, testable extraction that gives identical output for identical repo state.
 - A page that is complete and honest with no model in the loop.
 - A clean, optional seam for a model to sharpen the framing.
 - Portability: works against any OpenSpec repo the kit installs into, not just this one.
 
 **Non-Goals:**
+
 - Not a live dashboard or server; a static file regenerated on demand.
 - Not a linter or a gate; it reports, it does not block.
 - Not an authored narrative generator; the model may only rewrite the hero thesis, and

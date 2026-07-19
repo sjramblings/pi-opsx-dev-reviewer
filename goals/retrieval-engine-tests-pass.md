@@ -1,3 +1,5 @@
+# Goal — retrieval-engine-tests-pass
+
 predicate: bun test tools/select-learnings.test.ts >/dev/null 2>&1
 born: 2026-07-09
 source: add-trust-and-goals

@@ -1,8 +1,11 @@
 # shared-theme Specification
 
 ## Purpose
+
 TBD - created by archiving change add-architecture-html. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: One theme asset backs both HTML outputs
 
 The design tokens SHALL live in a single shared asset that both the architecture HTML template
@@ -28,4 +31,3 @@ preference and to a manual toggle.
 
 - **WHEN** a page is opened under a dark system preference with no manual override
 - **THEN** the dark palette is applied
-

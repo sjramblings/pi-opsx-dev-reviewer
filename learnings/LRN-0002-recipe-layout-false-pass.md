@@ -14,6 +14,8 @@ created: 2026-07-09
 supersedes: null
 ---
 
+# LRN-0002-recipe-layout-false-pass
+
 ## Rule
 
 Any guard/check recipe that scans a hardcoded directory glob must scan every layout the

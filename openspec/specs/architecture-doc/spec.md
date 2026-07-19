@@ -1,8 +1,11 @@
 # architecture-doc Specification
 
 ## Purpose
+
 TBD - created by archiving change add-architecture-writer. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The architecture artifact is an arc42 section tree
 
 The `architecture-writer` subagent SHALL produce `docs/architecture/` as an index file plus twelve
@@ -129,4 +132,3 @@ generation run, so the two are produced together.
 
 - **WHEN** the architecture-writer completes a generation run
 - **THEN** both the markdown tree and `index.html` are present and consistent
-

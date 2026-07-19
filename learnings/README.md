@@ -10,7 +10,7 @@ The harness has three learning surfaces. To avoid dual-write drift, each owns ex
 kind of fact:
 
 | Surface | Owns | Write trigger |
-|---------|------|---------------|
+| --------- | ------ | --------------- |
 | `review-log.md` (per change) | Append-only **ledger** of every reviewer verdict. Provenance source. **Never** a learning store. | developer, per task |
 | `AGENTS.md` (repo root) | **Global, always-on, unscoped** invariants only (cap ~60 lines). | `/opsx-retro`, human ack |
 | `learnings/` (this dir) | The **sole** home for any rule that is **glob-scoped** to particular paths. | `/opsx-retro`, human ack |

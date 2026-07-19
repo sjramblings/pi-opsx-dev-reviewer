@@ -1,8 +1,11 @@
 # agent-path-scoping Specification
 
 ## Purpose
+
 TBD - created by archiving change add-architecture-writer. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: architect-scope supports per-agent write path allowlists
 
 The `architect-scope` extension SHALL resolve write permission from a per-agent path policy rather
@@ -58,4 +61,3 @@ including inside comments and strings, and SHALL keep every quote character in e
 
 - **WHEN** a pi session starts with the modified extension installed
 - **THEN** `harness-selftest` does not raise the unguarded-harness halt banner
-
