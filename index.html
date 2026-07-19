@@ -87,7 +87,7 @@
 </header>
 
 <h2 id="pipeline">The pipeline</h2>
-<p class="sub">Five specialist subagents, each a separate pi process with its own model and tool allowlist. The main
+<p class="sub">Six specialist subagents, each a separate pi process with its own model and tool allowlist. The main
 agent orchestrates and is structurally prevented from doing the work itself.</p>
 <div class="flow">
   <span class="node">solution-architect</span><span class="arr">→</span>
@@ -95,12 +95,13 @@ agent orchestrates and is structurally prevented from doing the work itself.</p>
   <span class="node">developer</span><span class="arr">→</span>
   <span class="node">reviewer</span><span class="arr">→</span>
   <span class="node">tech-writer</span><span class="arr">→</span>
+  <span class="node">architecture-writer</span><span class="arr">→</span>
   <span class="node">archive</span>
 </div>
 <p>The architect settles the design and records ADRs; a cross-family spec-reviewer red-teams the spec before any
 code exists; the developer implements one task at a time against a frozen probe; a different-family reviewer grades
-the diff; the tech-writer documents what shipped; and a set of mechanical gates verify presence, evidence integrity,
-and load-safety before the change is archived.</p>
+the diff; the tech-writer documents what shipped; the architecture-writer refreshes the repo-scoped arc42 tree when
+architecture changed; and mechanical gates verify presence, evidence integrity, and load-safety before archive.</p>
 
 <h2 id="protections">The protection model</h2>
 <p class="sub">Eleven layers. Each is a structural control, not a prompt asking nicely.</p>
@@ -118,9 +119,10 @@ and load-safety before the change is archived.</p>
   <div><span class="badge b-red">fail closed</span></div>
   <h3>Architect confined to design artifacts (architect-scope)</h3>
   <p>The solution-architect can only write design artifacts (<code>proposal.md</code>, <code>design.md</code>,
-  <code>specs/**</code>, <code>docs/decisions/**</code>). It fails <strong>closed</strong>: an unidentified or
-  unparseable agent is restricted, not waved through — so a future change to how pi reports agent identity can never
-  silently hand out unrestricted write.</p>
+  <code>specs/**</code>, <code>docs/decisions/**</code>). The architecture-writer can only write
+  <code>docs/architecture/**</code> and is blocked from <code>docs/decisions/**</code>. It fails <strong>closed</strong>:
+  an unidentified or unparseable agent is restricted, not waved through — so a future change to how pi reports agent
+  identity can never silently hand out unrestricted write.</p>
 </div>
 <div class="card c-red">
   <div><span class="badge b-red">fail closed</span></div>
@@ -231,9 +233,10 @@ pi process; the reviewer roles are read-only by tool allowlist, not by prompt.</
 <tr><td><code>developer</code></td><td><code>openai-codex/gpt-5.5</code></td><td>Implements exactly one task; supplies raw evidence + a self-check.</td><td>Full tools</td></tr>
 <tr><td><code>reviewer</code></td><td><code>openai-codex/gpt-5.4</code></td><td>Adversarial code review; empirical BLOCK gate; de-biased input.</td><td>Read-only</td></tr>
 <tr><td><code>tech-writer</code></td><td><code>openai-codex/gpt-5.4</code></td><td>Documents what shipped; Diátaxis structure; banned LLM-writing tells.</td><td>Docs files only</td></tr>
+<tr><td><code>architecture-writer</code></td><td><code>anthropic/claude-opus-4-8</code></td><td>Generates and refreshes the repo-scoped arc42 architecture tree with Well-Architected evidence.</td><td><code>docs/architecture/**</code> only</td></tr>
 </table></div>
 <p class="callout info"><strong>Model note (this machine):</strong> pins are all-OpenAI except <code>spec-reviewer</code>
-(Anthropic), which keeps a genuine cross-family perspective while remaining reachable here. For a true cross-family
+and <code>architecture-writer</code> (Anthropic), which keeps genuine cross-family perspectives while remaining reachable here. For a true cross-family
 <em>code</em> review, point <code>reviewer</code> at a non-OpenAI provider too — see the <a href="README.md">README</a>
 Models section for the billing trade-off.</p>
 
@@ -243,7 +246,7 @@ via pi&#39;s <code>tool_call</code> and <code>session_start</code> events.</p>
 <div class="tablewrap"><table>
 <tr><th>Extension</th><th>Fires on</th><th>What it enforces</th></tr>
 <tr><td><code>force-delegate</code></td><td><code>tool_call</code></td><td>Main agent read-only: write/edit blocked, bash restricted to a read-only allowlist. No-ops inside subagents.</td></tr>
-<tr><td><code>architect-scope</code></td><td><code>tool_call</code></td><td>Fail-closed path-gate: only the architect writes, and only design artifacts; unidentified agents blocked.</td></tr>
+<tr><td><code>architect-scope</code></td><td><code>tool_call</code></td><td>Fail-closed path-gate: the architect writes design artifacts only; architecture-writer writes <code>docs/architecture/**</code> only; unidentified agents blocked.</td></tr>
 <tr><td><code>harness-selftest</code></td><td><code>session_start</code></td><td>Loud <code>HARNESS UNGUARDED</code> halt if force-delegate did not load.</td></tr>
 <tr><td><code>developer-guard</code></td><td><code>tool_call</code></td><td>Blocks catastrophic bash (recursive rm, force-push, sudo, dd/mkfs, curl-pipe-shell, fork bomb) for every agent.</td></tr>
 <tr><td><code>branch-guard</code></td><td><code>tool_call</code></td><td>Enforces PR flow: blocks commit/push/force-push to protected branches (main/master) for every agent.</td></tr>
@@ -262,7 +265,7 @@ false pass); the guards never skip.</p>
 <tr><td><code>just verify-gate</code></td><td>Deterministic pre-review pass: <code>tsc</code>/<code>eslint</code>/<code>semgrep</code>. The LLM reviewer only judges what a linter cannot.</td><td>Graceful</td></tr>
 <tr><td><code>just probe-check &lt;change&gt;</code></td><td>Every task in <code>tasks.md</code> must carry a <code>probe:</code> line (frozen before apply).</td><td>Never</td></tr>
 <tr><td><code>just run-probe &lt;change&gt; &lt;id&gt; &lt;cmd&gt;</code></td><td>Neutral executor: runs the probe, writes a sha256-attested transcript to the ledger.</td><td>Never</td></tr>
-<tr><td><code>just archive-check &lt;change&gt;</code></td><td>Blocks archive unless the review ledger has a verdict and every attestation hash still matches.</td><td>Never</td></tr>
+<tr><td><code>just archive-check &lt;change&gt;</code></td><td>Blocks archive unless the review ledger has a verdict, every attestation hash still matches, and architecture-impacting changes refreshed <code>docs/architecture/</code> (or records the skip reason).</td><td>Never</td></tr>
 <tr><td><code>just brief-check &lt;file&gt;</code></td><td>A delegation brief must name <code>files:</code>, <code>probe:</code>, <code>out-of-scope:</code>, <code>spec:</code>.</td><td>Never</td></tr>
 <tr><td><code>just learnings-preview [ref]</code></td><td>Read-path: prints the active <code>learnings/</code> whose scope glob matches the files changed since <code>ref</code> (the scoped tier of BRIEF context).</td><td>Never</td></tr>
 <tr><td><code>just check-learnings</code></td><td>Canary: fails loud if retrieval misses a diff that must match, or returns a false positive (hermetic fixture, both directions).</td><td>Never</td></tr>
@@ -272,6 +275,8 @@ false pass); the guards never skip.</p>
 <tr><td><code>just goals</code></td><td>Re-verify every standing-goal predicate; flip satisfied/VIOLATED; exit non-zero on regression.</td><td>Never</td></tr>
 <tr><td><code>just session-cost &lt;session.jsonl&gt;</code></td><td>Roll up a pi session's cost per model + grand total (the export shows none); flags subagent calls whose cost is TUI-only. <code>--html</code> emits a viewer fragment.</td><td>Never</td></tr>
 <tr><td><code>just tool-events</code></td><td>Mine the guards' blocked-action ledger (and, with <code>--session</code>, retry loops) into candidate learnings for <code>/opsx-retro</code>.</td><td>Never</td></tr>
+<tr><td><code>just arch-lint</code></td><td>Checks the arc42 tree, stated costs, ADR links, Well-Architected IDs, repo evidence, and section completeness.</td><td>Graceful for missing optional lookup sources; absent tree fails</td></tr>
+<tr><td><code>just waf-grounding</code></td><td>Resolves Well-Architected best-practice claims from the synced corpus, defaulting to HIGH-risk scope.</td><td>Never silently; unsynced corpus fails loud</td></tr>
 <tr><td><code>just docs-lint</code></td><td>markdownlint + Vale + lychee + cspell over all Markdown.</td><td>Graceful</td></tr>
 <tr><td><code>just docs-lint-setup</code></td><td>Installs the docs-lint toolchain.</td><td>—</td></tr>
 </table></div>
@@ -280,7 +285,7 @@ false pass); the guards never skip.</p>
 <p class="sub">The <code>dev-reviewer</code> schema bakes the whole contract into the OpenSpec workflow so it survives
 <code>openspec update</code> (unlike a hand-edited prompt).</p>
 <ul class="lead-list">
-  <li><strong>Artifacts:</strong> proposal → specs → design → tasks → <code>review-report</code> (the ledger) → <code>docs</code> (the doc delta). The <code>apply</code> template mandates developer→reviewer delegation.</li>
+  <li><strong>Artifacts:</strong> proposal → specs → design → tasks → <code>review-report</code> (the ledger) → <code>docs</code> (the doc delta) → <code>architecture</code> (<code>docs/architecture/</code>, owned by architecture-writer). The <code>apply</code> template mandates developer→reviewer delegation.</li>
   <li><strong>Presence honesty:</strong> OpenSpec 1.4.1 does <em>not</em> hard-gate archive on a missing artifact — that is what <code>just archive-check</code> exists to enforce.</li>
   <li><strong>Prompt templates</strong> (<code>~/.pi/agent/prompts/</code>): <code>/opsx-loop &lt;change&gt;</code> drives the delegation loop, <code>/opsx-review &lt;change&gt;</code> runs one adversarial review, <code>/opsx-retro &lt;change&gt;</code> ratchets findings into rules before archive, <code>/opsx-advise &lt;change&gt;</code> gives a cross-family second opinion on the approach at commitment boundaries, and <code>/opsx-compost</code> mines a week of failures, reflections, and tool-events into at most three proposed changes.</li>
   <li><strong>Algorithm grafts</strong>: learnings carry a <code>conjectured&rarr;refuted_by&rarr;learned&rarr;criterion_now</code> refutation core; bug-fix tasks are reproduce-first (a failing repro is the first probe, red&rarr;green, or the reviewer BLOCKs); and the <strong>meta-loop</strong> (<code>/opsx-retro</code> reflection &rarr; <code>/opsx-compost</code>) proposes process/doctrine changes &mdash; propose-only, human sign-off, grounded in the empirical signals, never self-applied.</li>
@@ -332,7 +337,7 @@ next time, a higher trust tier, one more invariant guarded. Nothing that passed 
 
 <h3>1. Install (global, per machine)</h3>
 <pre><code>./install.sh</code></pre>
-<p>Installs <code>@mjakl/pi-subagent</code>, copies the five agent files and the three prompt templates into
+<p>Installs <code>@mjakl/pi-subagent</code>, copies the six agent files and the five prompt templates into
 <code>~/.pi/agent/</code>, and prints a model sanity check. Adjust any <code>model:</code> line to what
 <code>pi --list-models</code> shows on your machine.</p>
 

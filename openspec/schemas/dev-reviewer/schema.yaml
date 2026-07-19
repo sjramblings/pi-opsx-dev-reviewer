@@ -77,13 +77,33 @@ artifacts:
       corresponding verdict entry here.
     requires:
       - tasks
+  - id: architecture
+    generates: docs/architecture/**
+    description: Repo architecture description — written by the architecture-writer subagent
+    template: architecture.md
+    instruction: >
+      This artifact is owned by the `architecture-writer` subagent and produces the
+      repo-scoped `docs/architecture/` arc42 section tree. Derive structural facts
+      from the shipped repo at generation time with `file:line` evidence; do not
+      duplicate code, IaC, configuration, or proposal intent into prose that would
+      drift. Record only what the repo cannot state by itself: decisions, rationale,
+      constraints, quality requirements, risks, trade-offs, and evidence.
+
+      The index must carry provenance and the HLD/LLD crosswalk required by the
+      architecture-doc spec without restructuring the arc42 tree. Section 9 indexes
+      ADRs under `docs/decisions/` by link, number, title, and status only. The
+      architecture-writer must never create, edit, or restate ADRs; undocumented
+      architecturally significant choices are recorded as section 11 decision debt.
+    requires:
+      - tasks
   - id: docs
-    generates: docs/**/*.md
+    generates: "docs/{*.md,!(architecture)/**/*.md}"
     description: Documentation delta — written by the tech-writer subagent
     template: docs.md
     instruction: >
       This artifact makes good documentation a condition of a complete change, not an
-      afterthought. Owned by the `tech-writer` subagent. It must cover every
+      afterthought. Owned by the `tech-writer` subagent, excluding
+      `docs/architecture/**`, which is owned only by `architecture-writer`. It must cover every
       user-visible change in this change folder, structured by Diátaxis (one mode per
       page), styled to pass the repo docs-lint gate, and verified against the shipped
       code (not the proposal's intent). This explicitly includes the repo's root-level

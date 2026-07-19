@@ -31,6 +31,42 @@ docs-lint:
     fi
     exit "$rc"
 
+# Resolve and scope Well-Architected best-practice claims from the synced corpus.
+# The default scope is HIGH-risk; pass `scope --full-sweep` to assess every risk.
+waf-grounding *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bun tools/waf-grounding.ts {{args}}
+
+# Render docs/architecture/ (the arc42 markdown tree) to a self-contained, themed
+# docs/architecture/index.html. Markdown stays the source of truth; this is a derived,
+# deterministic render sharing one theme with the evolution timeline. Re-run after any
+# change to the tree, or arch-lint's freshness check will fail.
+architecture-html tree="docs/architecture":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bun tools/architecture-html.ts {{tree}}
+
+# Lint the generated architecture tree. Like docs-lint, this reports FAIL for real
+# violations, PARTIAL when an optional lookup tool/source is missing, and clean only
+# when every check ran. An absent tree is not a clean state. Includes an html-freshness
+# check: docs/architecture/index.html must be a current render of the markdown.
+arch-lint:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    tree="${ARCH_LINT_DIR:-docs/architecture}"
+    decisions="${ARCH_LINT_DECISIONS_DIR:-docs/decisions}"
+    if [ ! -d "$tree" ]; then
+        echo "arch-lint: not-found — $tree/ was not found"
+        exit 1
+    fi
+    if ! command -v bun >/dev/null 2>&1; then
+        echo "── arch-lint engine: bun not installed, skipping 6 check(s) ──"
+        echo "arch-lint: PARTIAL — 6 check(s) skipped, architecture NOT fully checked"
+        exit 0
+    fi
+    bun tools/arch-lint.ts "$tree" "$decisions"
+
 # Hard presence gate before archiving a change. OpenSpec 1.4.1 does NOT block archive on
 # a missing review-report/docs artifact, so this check enforces it. Never skips; exits
 # non-zero if the review ledger is absent or empty. Run before `openspec archive`.
@@ -60,6 +96,156 @@ archive-check change:
         else echo "  attestation ok: $rel"; fi
     done < <(grep -E '^file: probes/' "$log" | sed 's/^file: //' || true)
     if [ "$fail" -ne 0 ]; then echo "archive-check: FAIL -- attestation mismatch" >&2; exit 1; fi
+
+    # Require architecture refreshes only when the actual change diff touches paths whose
+    # shape affects system architecture. Keep this separate from the ledger and probe checks
+    # above: those checks are presence/integrity gates, this one is a scoped diff gate.
+    command -v git >/dev/null 2>&1 || { echo "archive-check: FAIL — git is required to evaluate the architecture refresh gate." >&2; exit 1; }
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "archive-check: FAIL — not inside a git work tree; cannot evaluate changed paths." >&2; exit 1; }
+
+    archive_base_source=""
+    archive_merge_base=""
+    archive_base_commit=""
+    archive_head_commit=$(git rev-parse --verify HEAD)
+    if [ -n "${ARCHIVE_CHECK_BASE:-}" ]; then
+        archive_base_source="ARCHIVE_CHECK_BASE=$ARCHIVE_CHECK_BASE"
+        archive_base_commit=$(git rev-parse --verify --quiet --end-of-options "${ARCHIVE_CHECK_BASE}^{commit}") || {
+            echo "archive-check: FAIL — ARCHIVE_CHECK_BASE does not resolve to a commit: $ARCHIVE_CHECK_BASE" >&2
+            exit 1
+        }
+        archive_merge_base=$(git merge-base HEAD "$archive_base_commit") || {
+            echo "archive-check: FAIL — HEAD and ARCHIVE_CHECK_BASE have no common ancestor: $ARCHIVE_CHECK_BASE" >&2
+            exit 1
+        }
+    else
+        archive_best_distance=""
+        archive_best_priority=0
+        archive_candidate_priority=0
+        for archive_base_candidate in \
+            refs/heads/main \
+            refs/heads/master \
+            refs/remotes/origin/main \
+            refs/remotes/upstream/main \
+            refs/remotes/origin/master \
+            refs/remotes/upstream/master
+        do
+            archive_candidate_priority=$((archive_candidate_priority + 1))
+            if git show-ref --verify --quiet "$archive_base_candidate"; then
+                archive_candidate_commit=$(git rev-parse --verify --quiet "$archive_base_candidate^{commit}") || continue
+                archive_candidate_merge_base=$(git merge-base HEAD "$archive_candidate_commit" 2>/dev/null) || continue
+                archive_candidate_distance=$(git rev-list --count "$archive_candidate_merge_base"..HEAD) || continue
+                if [ -z "$archive_merge_base" ] || \
+                    [ "$archive_candidate_distance" -lt "$archive_best_distance" ] || \
+                    { [ "$archive_candidate_distance" -eq "$archive_best_distance" ] && [ "$archive_candidate_priority" -lt "$archive_best_priority" ]; }; then
+                    archive_merge_base="$archive_candidate_merge_base"
+                    archive_base_source="$archive_base_candidate"
+                    archive_base_commit="$archive_candidate_commit"
+                    archive_best_distance="$archive_candidate_distance"
+                    archive_best_priority="$archive_candidate_priority"
+                fi
+            fi
+        done
+        if [ -z "$archive_merge_base" ]; then
+            echo "archive-check: FAIL — could not find a main/master base for the architecture refresh gate; set ARCHIVE_CHECK_BASE to the archive comparison base." >&2
+            exit 1
+        fi
+        if [ "$archive_base_commit" = "$archive_head_commit" ]; then
+            archive_base_source="$archive_base_source (same commit; working tree and untracked paths only)"
+        fi
+    fi
+    echo "architecture refresh: evaluating change diff from $archive_base_source (merge-base $archive_merge_base) plus working tree and untracked paths."
+
+    changed_paths=()
+    while IFS= read -r -d '' path; do
+        [ -n "$path" ] || continue
+        case "$path" in
+            /*|../*|*/../*|./*|*/./*)
+                echo "archive-check: FAIL — git returned an unsafe changed path: $path" >&2
+                exit 1
+                ;;
+        esac
+        changed_paths+=("$path")
+    done < <({ git diff --name-only --no-renames -z "$archive_merge_base" HEAD --; git diff --name-only --no-renames -z HEAD --; git ls-files --others --exclude-standard -z; } | sort -zu)
+
+    significant_globs=(
+        "extensions/**"
+        "agents/**"
+        "openspec/schemas/**"
+        "docs/decisions/**"
+        "tools/**"
+        "src/**"
+        "lib/**"
+        "app/**"
+        "packages/**"
+        "services/**"
+        "cmd/**"
+        "internal/**"
+        "api/**"
+        "infra/**"
+        "infrastructure/**"
+        "iac/**"
+        "cdk/**"
+        "terraform/**"
+        "cloudformation/**"
+        "stacks/**"
+        "constructs/**"
+        ".github/workflows/**"
+        "Dockerfile"
+        "Dockerfile.*"
+        "docker-compose*.yml"
+        "docker-compose*.yaml"
+        "compose*.yml"
+        "compose*.yaml"
+        "justfile"
+        "justfile.opsx"
+        "package.json"
+        "bun.lockb"
+        "package-lock.json"
+        "pnpm-lock.yaml"
+        "yarn.lock"
+        "Cargo.toml"
+        "Cargo.lock"
+        "go.mod"
+        "go.sum"
+        "pyproject.toml"
+        "poetry.lock"
+        "requirements*.txt"
+    )
+    significant=()
+    arch_refreshed=0
+    docs_only=1
+    for path in "${changed_paths[@]}"; do
+        if [[ "$path" == docs/architecture/* ]]; then arch_refreshed=1; fi
+        if [[ "$path" != docs/* ]]; then docs_only=0; fi
+        for glob in "${significant_globs[@]}"; do
+            if [[ "$path" == $glob ]]; then
+                significant+=("$path (matched $glob)")
+                break
+            fi
+        done
+    done
+
+    if [ "${#significant[@]}" -eq 0 ]; then
+        if [ "${#changed_paths[@]}" -eq 0 ]; then
+            echo "architecture refresh: skipped — no changed paths detected in the change diff."
+        elif [ "$docs_only" -eq 1 ]; then
+            echo "architecture refresh: skipped — only non-architecturally significant docs paths changed (${#changed_paths[@]} path(s))."
+        else
+            echo "architecture refresh: skipped — no changed path matched the architecturally significant globs (${#changed_paths[@]} path(s) checked)."
+        fi
+    elif [ "$arch_refreshed" -eq 0 ]; then
+        echo "architecture refresh: FAIL — architecturally significant paths changed but docs/architecture/ was not refreshed." >&2
+        printf '  - %s\n' "${significant[@]}" >&2
+        echo "  Refresh docs/architecture/** before archive." >&2
+        exit 1
+    elif [ ! -d docs/architecture ]; then
+        echo "architecture refresh: FAIL — docs/architecture/ was changed but the architecture tree is absent." >&2
+        exit 1
+    else
+        echo "architecture refresh: required — ${#significant[@]} architecturally significant path(s) changed."
+        printf '  - %s\n' "${significant[@]}"
+        echo "architecture refresh: present — docs/architecture/ changed in this diff."
+    fi
     echo "  Reminder: confirm the docs delta for this change is written and 'just docs-lint' is clean."
 
 # Guard against pi extension LOAD-BREAKERS. pi 0.79.9 loads extensions with a fragile
@@ -258,3 +444,11 @@ session-cost session *flags:
 # the recurring signal; does not re-log every call (pi's session jsonl already has those).
 tool-events *flags:
     @bun tools/assess-tool-events.ts {{flags}}
+
+# Render the architecture-evolution timeline for an OpenSpec repo (default: this one) to
+# <repo>/architecture-evolution.html — a self-contained interactive page derived from
+# openspec/changes + archive + specs + git history. The hero thesis is computed from the
+# data; to have a model sharpen it, run the evolution-narrator agent (it writes thesis.json)
+# then: bun tools/evolution-timeline.ts <repo> --thesis thesis.json
+evolution-timeline repo=".":
+    @bun tools/evolution-timeline.ts {{repo}}
