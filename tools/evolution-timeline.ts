@@ -15,7 +15,7 @@
 // (the pi tokenizer), not for tools/.
 
 import { readdirSync, readFileSync, existsSync, statSync, writeFileSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { join, basename, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { inlineTheme } from "./lib/theme.ts";
@@ -128,13 +128,29 @@ function cap1(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1)
 
 const read = (p: string): string => (existsSync(p) ? readFileSync(p, "utf8") : "");
 
+function gitLogDates(repo: string, follow: boolean, pathspec: string): string[] {
+  const args = ["log"];
+  if (follow) args.push("--follow");
+  args.push("--diff-filter=A", "--format=%ad", "--date=short", "--", pathspec);
+  return execFileSync("git", args, { cwd: repo, encoding: "utf8" })
+    .trim().split("\n").filter(Boolean);
+}
+
+// The change's original add-date, preserved across an archive rename. Two things the naive
+// query got wrong: (1) the path must be relative to `repo`, or with a relative `repo` git
+// searches `<repo>/<repo>/...` and finds nothing; (2) a directory query cannot follow a
+// rename, so an archived change reported its archive-move date. Follow proposal.md (a file
+// every change has, so --follow works) back to its original commit; fall back to the
+// directory query when there is no proposal.md.
 function gitFirstDate(repo: string, path: string): string | null {
   try {
-    const out = execFileSync(
-      "git", ["log", "--diff-filter=A", "--format=%ad", "--date=short", "--", path],
-      { cwd: repo, encoding: "utf8" },
-    ).trim().split("\n").filter(Boolean);
-    return out.length ? out[out.length - 1] : null;
+    const relDir = relative(repo, path) || ".";
+    if (existsSync(join(path, "proposal.md"))) {
+      const dates = gitLogDates(repo, true, join(relDir, "proposal.md"));
+      if (dates.length) return dates[dates.length - 1];
+    }
+    const dirDates = gitLogDates(repo, false, relDir);
+    return dirDates.length ? dirDates[dirDates.length - 1] : null;
   } catch { return null; }
 }
 

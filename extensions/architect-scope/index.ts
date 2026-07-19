@@ -34,6 +34,10 @@ const ARCHITECTURE_WRITER_REASON =
 	"architect-scope: architecture-writer writes are restricted to docs/architecture/**. " +
 	"Decisions in docs/decisions/** belong to the solution-architect.";
 
+const EVOLUTION_NARRATOR_REASON =
+	"architect-scope: evolution-narrator writes are restricted to thesis.json. It sharpens " +
+	"the timeline hero thesis only, never the tool, the template, or any count.";
+
 const MISSING_POLICY_REASON =
 	"architect-scope: scoped agent policy is missing. Write blocked by fail closed guard.";
 
@@ -43,7 +47,7 @@ const MISSING_POLICY_REASON =
 // reviewer and spec-reviewer are deliberately absent; they hold no write tool, so listing
 // them here would only loosen this guard for no gain.
 const OPEN_WRITERS = new Set(["developer", "tech-writer"]);
-const SCOPED_AGENT_NAMES = new Set(["architecture-writer"]);
+const SCOPED_AGENT_NAMES = new Set(["architecture-writer", "evolution-narrator"]);
 
 type PathPolicy = {
 	allowedPrefixes: string[];
@@ -56,6 +60,13 @@ const AGENT_PATH_POLICIES = new Map<string, PathPolicy>([
 		{
 			allowedPrefixes: ["docs/architecture/"],
 			blockReason: ARCHITECTURE_WRITER_REASON,
+		},
+	],
+	[
+		"evolution-narrator",
+		{
+			allowedPrefixes: ["thesis.json"],
+			blockReason: EVOLUTION_NARRATOR_REASON,
 		},
 	],
 ]);

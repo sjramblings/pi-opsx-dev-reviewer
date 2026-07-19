@@ -35,10 +35,10 @@ install_global() {
   # 2. Agent files → the active global agents dir ──────────────────────────────
   AGENTS_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/agents"
   mkdir -p "$AGENTS_DIR"
-  for a in solution-architect developer reviewer tech-writer spec-reviewer architecture-writer; do
+  for a in solution-architect developer reviewer tech-writer spec-reviewer architecture-writer evolution-narrator; do
     cp "$HERE/agents/$a.md" "$AGENTS_DIR/$a.md"
   done
-  echo "→ Installed architect/developer/reviewer/tech-writer/spec-reviewer/architecture-writer agents to $AGENTS_DIR"
+  echo "→ Installed architect/developer/reviewer/tech-writer/spec-reviewer/architecture-writer/evolution-narrator agents to $AGENTS_DIR"
 
   # 2b. Prompt templates → the active global prompts dir ───────────────────────
   PROMPTS_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/prompts"
@@ -74,10 +74,11 @@ install_project() {
      "$HERE"/tools/trust.ts "$HERE"/tools/verify-goals.ts "$HERE"/tools/session-cost.ts \
      "$HERE"/tools/assess-tool-events.ts "$HERE"/tools/waf-grounding.ts \
      "$HERE"/tools/arch-lint.ts "$HERE"/tools/pylib.ts \
-     "$HERE"/tools/architecture-html.ts "$HERE"/tools/architecture.template.html "$TARGET/tools/"
+     "$HERE"/tools/architecture-html.ts "$HERE"/tools/architecture.template.html \
+     "$HERE"/tools/evolution-timeline.ts "$HERE"/tools/evolution-timeline.template.html "$TARGET/tools/"
   mkdir -p "$TARGET/tools/lib"
   cp "$HERE"/tools/lib/theme.ts "$HERE"/tools/lib/theme.css "$TARGET/tools/lib/"
-  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, pylib, architecture-html + template + shared theme)"
+  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, pylib, architecture-html, evolution-timeline + templates + shared theme)"
 
   # 3. OpenSpec dev-reviewer schema + config. A repo has exactly ONE schema; if this repo
   #    already uses a different one, the dev-reviewer apply flow is mutually exclusive with

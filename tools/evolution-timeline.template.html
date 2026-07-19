@@ -310,7 +310,9 @@ function drawChart() {
     if (c.archived) cumA += c.reqCount;
     return { i, cum, cumA, c };
   });
-  const max = Math.ceil(cum / 10) * 10;
+  // Floor the axis at 10 so an empty or zero-requirement repo cannot make max 0 — that would
+  // make the grid step (max/4) zero and spin the loop below forever, and divide by zero in py.
+  const max = Math.max(10, Math.ceil(cum / 10) * 10);
   const px = (i) => pad.l + (pts.length === 1 ? iw / 2 : (i / (pts.length - 1)) * iw);
   const py = (v) => pad.t + ih - (v / max) * ih;
 

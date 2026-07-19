@@ -269,10 +269,15 @@ export function renderTree(treeDir: string): string {
 }
 
 function main(argv: string[]): number {
-  const args = argv.filter((a) => a !== "--out");
-  const treeDir = args.find((a) => !a.startsWith("-")) ?? "docs/architecture";
   const outIdx = argv.indexOf("--out");
-  const out = outIdx !== -1 ? argv[outIdx + 1] : join(treeDir, "index.html");
+  const outArg = outIdx !== -1 ? argv[outIdx + 1] : undefined;
+  const outValIdx = outIdx !== -1 ? outIdx + 1 : -1;
+  // Drop --out AND its value before selecting the positional tree, or the destination path
+  // gets picked up as treeDir (e.g. `--out /tmp/a.html` searched /tmp/a.html/README.md).
+  const positional = argv.filter((a, i) =>
+    a !== "--out" && i !== outValIdx && !a.startsWith("-"));
+  const treeDir = positional[0] ?? "docs/architecture";
+  const out = outArg ?? join(treeDir, "index.html");
   const html = renderTree(treeDir);
   writeFileSync(out, html);
   console.log(`architecture-html: ${out}`);
