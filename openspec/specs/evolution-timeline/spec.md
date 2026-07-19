@@ -95,4 +95,3 @@ that file; absence of the file SHALL leave the deterministic page fully intact.
 
 - **WHEN** no thesis file is supplied, or the supplied file is missing required fields
 - **THEN** the tool renders the computed thesis and does not fail
-
