@@ -39,3 +39,40 @@ EVIDENCE CHECK:
   extraction.
 - DEFERRED: pixel screenshot — `interceptor screenshot` wedged on backgrounded Chrome;
   layout/CSS unchanged from the previously browser-verified one-off, only hero text differs.
+
+## Verification pass 2026-07-19 (independent re-verify before archive)
+
+## Tasks 1.1-1.2 — Extractor and model
+
+VERDICT: PASS
+EVIDENCE CHECK: Yes. `tools/evolution-timeline.ts` exports the pure functions (parseDelta,
+parseTasks, computeThesis) with no git/fs inside them, plus `collectChange`/`buildModel` that
+read openspec/changes + archive + specs. Uncommitted-dating verified in source: `date = tracked
+?? statSync(dir).mtime` and `committed: tracked !== null` (index.ts:153,161) — an untracked
+change is dated by mtime and marked committed:false, no invented history. Live run derives a
+faithful model: 12 changes, 16 capabilities, 61 requirements, 124 scenarios, 3 archived.
+
+## Task 2.1 — Tests
+
+VERDICT: PASS
+EVIDENCE CHECK: Yes. `bun test tools/evolution-timeline.test.ts` → 9/9 pass, covering
+ADDED/MODIFIED/REMOVED op detection, mixed checkbox done/total, the all-added accretion thesis,
+and computeThesis never emitting an empty headline or subhead. tsc clean.
+
+## Tasks 3.1-3.2 — Template and render
+
+VERDICT: PASS
+EVIDENCE CHECK: Yes. The page renders self-contained (0 external references) and now inlines the
+shared theme (via the __THEME__ point landed by add-architecture-html). Headless-Chrome
+screenshot confirms the computed hero thesis, stat row, cumulative-requirements chart with
+declared/archived/uncommitted bands, filter chips, and the date-grouped change spine with
+per-change cards. The __MODEL__ injection has the fail-loud script-terminator guard.
+
+## Tasks 4.1-4.2 — Recipe and narrator
+
+VERDICT: PASS
+EVIDENCE CHECK: Yes. `just evolution-timeline` runs the deterministic tool against a repo arg
+(default `.`) and writes architecture-evolution.html. `agents/evolution-narrator.md` follows the
+agent skeleton, scope-clamped to writing thesis.json only, never the tool/template/counts —
+narration is optional and the page renders from data alone without it (verified: no --thesis
+needed).
