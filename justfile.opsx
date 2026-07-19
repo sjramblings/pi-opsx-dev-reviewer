@@ -214,7 +214,9 @@ archive-check change:
     significant=()
     arch_refreshed=0
     docs_only=1
-    for path in "${changed_paths[@]}"; do
+    # bash 3.2 (macOS default) errors on "${arr[@]}" for an empty array under set -u; the
+    # +"..." form expands to nothing safely when there are no changed paths.
+    for path in ${changed_paths[@]+"${changed_paths[@]}"}; do
         if [[ "$path" == docs/architecture/* ]]; then arch_refreshed=1; fi
         if [[ "$path" != docs/* ]]; then docs_only=0; fi
         for glob in "${significant_globs[@]}"; do
