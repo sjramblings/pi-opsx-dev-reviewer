@@ -155,3 +155,18 @@ test("unidentified resolution remains design artifact only", async () => {
 	const decision = await decisionFor(undefined, "src/app.ts");
 	expect(decision?.block).toBe(true);
 });
+
+test("evolution-narrator can write thesis.json", async () => {
+	await expect(decisionFor("evolution-narrator", "thesis.json")).resolves.toBeUndefined();
+});
+
+test("evolution-narrator is blocked from the tool", async () => {
+	const decision = await decisionFor("evolution-narrator", "tools/evolution-timeline.ts");
+	expect(decision?.block).toBe(true);
+	expect(decision?.reason).toContain("thesis.json");
+});
+
+test("evolution-narrator is blocked from design artifacts (no fall-through)", async () => {
+	const decision = await decisionFor("evolution-narrator", "design.md");
+	expect(decision?.block).toBe(true);
+});

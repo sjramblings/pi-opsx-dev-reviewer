@@ -119,6 +119,12 @@ const M = JSON.parse(document.getElementById("model").textContent);
 const $ = (s) => document.querySelector(s);
 const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c;
   if (h != null) n.innerHTML = h; return n; };
+// Escape values interpolated into innerHTML. Section bodies are already escaped by the
+// renderer, but titles, provenance, and crosswalk cells are raw markdown text — a heading
+// like <img src=x onerror=...> would otherwise execute when the file is opened.
+const esc = (s) => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 /* theme toggle (mirrors the evolution timeline) */
 (function () {
@@ -134,9 +140,9 @@ const el = (t, c, h) => { const n = document.createElement(t); if (c) n.classNam
 $("#title").textContent = M.title;
 const p = M.provenance || {};
 const provBits = [
-  p.commit ? `<span><b>commit</b> ${p.commit}</span>` : "",
-  p.date ? `<span><b>generated</b> ${p.date}</span>` : "",
-  p.corpusTag ? `<span><b>WAF corpus</b> ${p.corpusTag}</span>` : "",
+  p.commit ? `<span><b>commit</b> ${esc(p.commit)}</span>` : "",
+  p.date ? `<span><b>generated</b> ${esc(p.date)}</span>` : "",
+  p.corpusTag ? `<span><b>WAF corpus</b> ${esc(p.corpusTag)}</span>` : "",
 ].filter(Boolean).join("");
 $("#prov").innerHTML = provBits;
 
@@ -158,12 +164,12 @@ $("#stats").append(...stats.map((s) =>
 /* nav + sections */
 const toc = $("#toc"), main = $("#main");
 for (const s of M.sections) {
-  const a = el("a", null, `<span class="n">${s.num}</span>${s.title}`);
+  const a = el("a", null, `<span class="n">${esc(s.num)}</span>${esc(s.title)}`);
   a.href = "#sec-" + s.id;
   toc.append(a);
   const sec = el("section", "sec");
   sec.id = "sec-" + s.id;
-  sec.append(el("h2", null, `<span class="n">${s.num}</span>${s.title}`));
+  sec.append(el("h2", null, `<span class="n">${esc(s.num)}</span>${esc(s.title)}`));
   sec.append(el("div", null, s.html));
   main.append(sec);
 }
@@ -173,7 +179,7 @@ if (M.crosswalk.length) {
   const cw = el("div", "crosswalk");
   cw.append(el("h2", null, "HLD / LLD crosswalk"));
   const rows = M.crosswalk.map((r) =>
-    `<tr><td>${r.section}</td><td>${r.hld}</td><td>${r.lld}</td></tr>`).join("");
+    `<tr><td>${esc(r.section)}</td><td>${esc(r.hld)}</td><td>${esc(r.lld)}</td></tr>`).join("");
   cw.append(el("div", null,
     `<table><thead><tr><th>arc42 section</th><th>High-level design</th><th>Low-level design</th></tr></thead><tbody>${rows}</tbody></table>`));
   main.append(cw);

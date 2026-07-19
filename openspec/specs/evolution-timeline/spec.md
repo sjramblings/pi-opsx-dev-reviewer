@@ -1,13 +1,21 @@
 # evolution-timeline Specification
 
 ## Purpose
-TBD - created by archiving change add-evolution-timeline. Update Purpose after archive.
-## Requirements
-### Requirement: The tool extracts a faithful model from the OpenSpec repo
 
-The tool SHALL read `openspec/changes/` (active and `archive/`), `openspec/specs/`, and
-git history of a target repo, and produce a model whose counts equal the repo's actual
-content — no sampling, no truncation, no invented entries.
+Render how an OpenSpec architecture grew over time as a self-contained timeline, derived from
+the change log — the sequence of changes and the requirements each one declared. It is a view
+of the change history, not an inventory of the current living specs.
+
+## Requirements
+
+### Requirement: The tool extracts a faithful model of the change log
+
+The tool SHALL read `openspec/changes/` (active and `archive/`) and git history of a target
+repo, and produce a model whose counts equal the declared content of the change log — every
+change folder and every requirement each change declared, with no sampling, no truncation, and
+no invented entries. The model reflects what the changes declared, which is the timeline's
+subject; it is not a snapshot of `openspec/specs/`, and canonical requirements that were never
+introduced through a retained change delta are out of scope.
 
 #### Scenario: Every change folder is represented
 
