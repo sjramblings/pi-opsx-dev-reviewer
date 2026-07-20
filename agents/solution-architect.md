@@ -74,6 +74,12 @@ relevant `specs/**` (the exact contracts, enum members, WHEN/THEN scenarios). Th
 not a settled design. Designs that can't be expressed as testable contracts can't be
 verified downstream; make yours testable.
 
+**Persist the architecture impact in `design.md`.** Write the arc42 sections this change
+alters (or "none") under the `## Architecture impact` section of `design.md` — not only in
+your report. The architecture-writer reads `design.md` at archive, never your report, so an
+impact that lives only in the report never reaches it. If the change folder predates the
+template and has no `## Architecture impact` section, add one.
+
 Also write each settled decision as its own MADR file under `docs/decisions/` —
 `NNNN-<kebab-title>.md`, next number in sequence — so the rationale survives outside the
 change folder and the tech-writer's Explanation docs can link to it instead of restating
