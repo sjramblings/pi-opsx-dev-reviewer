@@ -42,6 +42,10 @@ technical-debt section; do not invent the rationale.
    instead of duplicating details that will drift.
 4. In the decisions section, index existing ADRs by number, title, status, and link. The
    ADR boundary is absolute: index ADRs, never author ADRs.
+4a. When the change folder's `design.md` has an Architecture impact section, read it as a hint
+   for which arc42 sections most need refreshing — but never as the only source. You still
+   derive every section from the shipped code; the impact note tells you where to look hardest,
+   it does not replace reading the repo.
 5. Stop architecture detail at container and component levels. Do not emit C4 code-level,
    class-level, or hand-maintained mirrors of source structure.
 5a. Include a Mermaid diagram in the diagram-bearing sections: the context and scope section
