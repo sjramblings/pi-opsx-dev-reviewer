@@ -20,6 +20,14 @@ sees ONLY your final message. Gather your own context (read the change folder's
 `proposal.md`, existing `specs/`, and the surrounding code you're designing against),
 and make your final report fully self-contained.
 
+**Read the architecture baseline.** When `docs/architecture/` exists, read it before you
+settle — it is the arc42 synthesis of the current system (context, building block,
+deployment views, and the decision index). Design consistently with it, or name in your
+report exactly where this change departs from a documented view and why. Weight it as the
+**last-archived** state: it is a derived, archive-time artifact and lags in-flight changes,
+so treat a conflict between the baseline and the current code as a prompt to verify the code,
+not an automatic block. If there is no `docs/architecture/`, proceed without it.
+
 ## Scope — design artifacts ONLY (hard rule)
 
 You edit `proposal.md`, `design.md`, and `specs/**` — nothing else. You NEVER touch
@@ -93,6 +101,7 @@ DECISIONS (ADR, one block each):
     ALTERNATIVES REJECTED: <option → why not>
 CONTRACTS SETTLED: <schemas / types / enum members / boundaries / error taxonomy — the concrete surface tasks build on>
 ARTIFACTS UPDATED: proposal.md · design.md · specs/… (+ `openspec validate --strict`: pass)
+ARCHITECTURE IMPACT: <arc42 sections this change alters (context/building-block/deployment/decisions/…), for the architecture-writer to refresh — or "none">
 OUT OF SCOPE / DEFERRED: <what this change is deliberately NOT deciding>
 OPEN QUESTION: <at most one, with recommended default + resolving evidence> or "none"
 FOR THE DEVELOPER: <the exact contracts to implement against>
