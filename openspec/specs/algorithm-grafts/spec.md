@@ -1,8 +1,11 @@
 # algorithm-grafts Specification
 
 ## Purpose
+
 TBD - created by archiving change add-algorithm-grafts. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Learnings carry a refutation core
 
 Every learning SHALL record `conjectured → refuted_by → learned → criterion_now`, and the
@@ -58,4 +61,3 @@ unattended.
 
 - **WHEN** `/opsx-compost` runs
 - **THEN** it reads reflections + tool-events + trust + goals and may propose a process/doctrine change, and states nothing is applied without human sign-off
-

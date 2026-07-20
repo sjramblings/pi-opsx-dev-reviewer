@@ -1,8 +1,11 @@
 # architect-scope Specification
 
 ## Purpose
+
 TBD - created by archiving change harden-architect-scope. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: architect-scope fails closed for unidentified agents
 
 The `architect-scope` extension SHALL deny `write` and `edit` tool calls whenever the
@@ -28,4 +31,3 @@ allowing them.
 
 - **WHEN** the current agent is positively identified as an agent other than `solution-architect` (e.g. `developer`)
 - **THEN** the extension does not restrict its writes
-
