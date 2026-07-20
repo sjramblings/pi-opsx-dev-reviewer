@@ -50,8 +50,8 @@ install_global() {
 
   # 3. Model sanity check ──────────────────────────────────────────────────────
   echo "→ Verify the agent models resolve on this machine (edit the 'model:' line if not):"
-  for m in "gpt-5.5 (architect/developer)" "gpt-5.4 (reviewer/tech-writer)"; do echo "      openai-codex/$m"; done
-  echo "      anthropic/claude-opus-4-8 (spec-reviewer/architecture-writer)"
+  for m in "gpt-5.5 (architect/developer/architecture-writer)" "gpt-5.4 (reviewer/tech-writer)"; do echo "      openai-codex/$m"; done
+  echo "      anthropic/claude-opus-4-8 (spec-reviewer — needs an Anthropic key; repoint if you have none)"
   echo "    List what is available with:  pi --list-models"
   echo
   echo "✓ pi-side (global) setup complete."
