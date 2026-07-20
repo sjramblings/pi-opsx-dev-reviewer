@@ -107,12 +107,12 @@ ONLY (never production code); if design reveals code must change, it flags that 
 handoff.
 
 **Models:** the agent files pin `gpt-5.5` on the `openai-codex` provider
-(solution-architect and developer — the heavy reasoning/production roles), `gpt-5.4`
-(reviewer and tech-writer), and `anthropic/claude-opus-4-8` for spec-reviewer and
-architecture-writer. This is an OpenAI-plus-Anthropic configuration for a machine where
-`openai-codex` (ChatGPT Plus/Pro `/login`, officially endorsed by OpenAI) and Anthropic
-models are available. List what your machine can reach with `pi --list-models`, then edit
-the `model:` line in any agent file to repoint.
+(solution-architect, developer, and architecture-writer — the heavy reasoning/synthesis
+roles) and `gpt-5.4` (reviewer, tech-writer, and spec-reviewer). This is an all-OpenAI
+configuration for a machine where `openai-codex` (ChatGPT Plus/Pro `/login`, officially
+endorsed by OpenAI) is the available provider, so every agent resolves out of the box. List
+what your machine can reach with `pi --list-models`, then edit the `model:` line in any agent
+file to repoint — see the cross-family caveat below.
 
 **Cross-family caveat:** the reviewer's value comes from *not* sharing the developer's
 blind spots (see [`docs/decisions/0001-cross-family-reviewer.md`](docs/decisions/0001-cross-family-reviewer.md)).
