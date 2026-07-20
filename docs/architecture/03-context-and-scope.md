@@ -24,3 +24,14 @@ schema and its gates, the learning/trust/goal ledgers, and the deterministic eng
 
 Out of scope: the pi runtime itself, the model providers, and the third-party corpus — the
 kit consumes these but does not own them.
+
+## System context
+
+```mermaid
+flowchart LR
+  op[Operator] --> pi[pi coding agent]
+  pi --> kit[pi-opsx-dev-reviewer harness]
+  kit --> subagents[Delegated subagents]
+  kit --> openspec[OpenSpec change log]
+  kit -.reads.-> corpus[Well-Architected corpus]
+```

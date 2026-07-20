@@ -44,6 +44,16 @@ technical-debt section; do not invent the rationale.
    ADR boundary is absolute: index ADRs, never author ADRs.
 5. Stop architecture detail at container and component levels. Do not emit C4 code-level,
    class-level, or hand-maintained mirrors of source structure.
+5a. Include a Mermaid diagram in the diagram-bearing sections: the context and scope section
+   (a context diagram — the system and its external partners), the building block view section
+   (a container/component diagram), and the deployment view section (a deployment diagram) all
+   require one. Include a `sequenceDiagram` in the runtime view and a tree in quality
+   requirements when a scenario or quality tree is present. Do NOT place a diagram in the
+   constraints, architecture decisions, risks, or glossary sections. Use stable Mermaid
+   primitives — `flowchart` and `sequenceDiagram` — for the required diagrams; `C4` and
+   `mindmap` are experimental and may be used only as optional extras, never as the required
+   diagram. Keep edge labels free of `--` (it breaks the parser); the gate validates every
+   diagram and fails on a syntax error.
 6. Name the accepted cost for every pattern or quality claim. A pattern claim needs the
    catalogue, repo instantiation evidence, and at least one consequence the system accepts.
 7. Record provenance in the index: source commit, generation date, Well-Architected corpus

@@ -24,3 +24,12 @@ locations on an operator's machine.
 Runtime state — the trust ledger, goal ledger, and tool-events audit — is generated under
 `memory/` and is gitignored, never committed. Guard load-health is verified in place at
 install time via `just check-extensions` (`justfile.opsx:245`).
+
+## Deployment topology
+
+```mermaid
+flowchart LR
+  repo[Kit source] -->|install.sh global mode| pi[~/.pi/agent: agents + prompts]
+  repo -->|install.sh here| proj[repo/.pi/extensions + tools + schema]
+  proj --> just[justfile.opsx recipes]
+```

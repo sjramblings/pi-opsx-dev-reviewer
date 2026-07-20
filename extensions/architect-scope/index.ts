@@ -197,8 +197,79 @@ function block(event: ToolCallEvent, reason: string, target: string): ToolDecisi
 	return { block: true, reason: reason };
 }
 
+const BASH_REASON =
+	"architect-scope: this scoped agent may only run read-only shell plus its own render and " +
+	"gate commands. A shell write outside its path scope is blocked -- do the write with the " +
+	"write tool, which is path-gated.";
+
+// Read-only commands a scoped agent may run. sed and awk are excluded on purpose: sed -i and
+// awk redirection can write files, which would bypass the write path gate.
+const READONLY_CMDS = new Set([
+	"ls", "cat", "rg", "grep", "find", "head", "tail", "wc", "jq", "echo", "pwd",
+	"git", "openspec", "true", "test",
+]);
+
+// Redirection and command substitution can hide a write; a chain operator separates commands.
+const BASH_DANGEROUS = new RegExp("[<>]|\\$\\(|\\x60");
+const BASH_CHAIN = new RegExp("&&|\\|\\||;|\\||&");
+const BASH_WS = new RegExp("\\s+");
+
+// Commands a scoped agent legitimately needs that are not read-only: they write, but only to
+// the scope of that agent. Keyed by agent name; each entry maps a base command to the allowed
+// first argument, so bun/just cannot be turned into an arbitrary-write vector.
+const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
+	[
+		"architecture-writer",
+		new Map<string, Set<string>>([
+			["just", new Set(["arch-lint", "architecture-html"])],
+			["bun", new Set(["tools/architecture-html.ts"])],
+		]),
+	],
+]);
+
+function scopedBashAllowed(agent: string, command: string): boolean {
+	if (typeof command !== "string" || command.trim() === "") return false;
+	if (BASH_DANGEROUS.test(command)) return false;
+	const writers = SCOPED_BASH_WRITERS.get(agent);
+	for (const rawSegment of command.split(BASH_CHAIN)) {
+		const segment = rawSegment.trim();
+		if (segment === "") continue;
+		const tokens = segment.split(BASH_WS);
+		const cmd = tokens[0];
+		// An inline env assignment (name=value ...) can inject GIT_PAGER and similar; block.
+		if (cmd.indexOf("=") !== -1) return false;
+		if (READONLY_CMDS.has(cmd)) continue;
+		const allowedArgs = writers ? writers.get(cmd) : undefined;
+		if (allowedArgs && tokens[1] !== undefined && allowedArgs.has(tokens[1])) {
+			// The command is an allowed writer, but its output must not be redirected outside
+			// scope. Block any output-destination flag: bun tools/architecture-html.ts --out
+			// <path> writes wherever --out points, which would escape the path gate.
+			if (tokens.some((t) => t === "--out" || t === "-o" || t.indexOf("--out=") === 0)) {
+				return false;
+			}
+			continue;
+		}
+		return false;
+	}
+	return true;
+}
+
 export default function (pi: PiEventBus) {
 	pi.on("tool_call", async (event: ToolCallEvent): Promise<ToolDecision | undefined> => {
+		if (event.toolName === "bash") {
+			// Only scoped agents are bash-gated here; force-delegate and developer-guard cover
+			// the main agent and the open writers. A scoped agent may run read-only shell plus
+			// its own render/gate commands; anything else that could write is blocked, so shell
+			// cannot bypass its write path scope.
+			const bashAgent = currentAgent();
+			if (!bashAgent || !SCOPED_AGENT_NAMES.has(bashAgent)) return undefined;
+			const input = event.input ?? {};
+			const command = typeof (input as { command?: unknown }).command === "string"
+				? (input as { command: string }).command
+				: "";
+			if (scopedBashAllowed(bashAgent, command)) return undefined;
+			return block(event, BASH_REASON, command);
+		}
 		if (event.toolName !== "write" && event.toolName !== "edit") return undefined;
 
 		const agent = currentAgent();

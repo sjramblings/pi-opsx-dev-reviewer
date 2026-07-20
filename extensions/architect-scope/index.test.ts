@@ -170,3 +170,56 @@ test("evolution-narrator is blocked from design artifacts (no fall-through)", as
 	const decision = await decisionFor("evolution-narrator", "design.md");
 	expect(decision?.block).toBe(true);
 });
+
+async function bashDecision(agent, command) {
+	if (agent === undefined) delete process.env.PI_SUBAGENT_STACK;
+	else process.env.PI_SUBAGENT_STACK = JSON.stringify([agent]);
+	let handler;
+	architectScope({ on(name, registered) { if (name === "tool_call") handler = registered; } });
+	return handler({ toolName: "bash", input: { command } });
+}
+
+test("architecture-writer bash: read-only allowed", async () => {
+	await expect(bashDecision("architecture-writer", "grep -r foo docs/")).resolves.toBeUndefined();
+});
+test("architecture-writer bash: just arch-lint allowed", async () => {
+	await expect(bashDecision("architecture-writer", "just arch-lint")).resolves.toBeUndefined();
+});
+test("architecture-writer bash: just architecture-html allowed", async () => {
+	await expect(bashDecision("architecture-writer", "just architecture-html")).resolves.toBeUndefined();
+});
+test("architecture-writer bash: sed -i outside scope blocked", async () => {
+	const d = await bashDecision("architecture-writer", "sed -i s/a/b/ src/app.ts");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: redirection blocked", async () => {
+	const d = await bashDecision("architecture-writer", "echo x > src/app.ts");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: command substitution blocked", async () => {
+	const d = await bashDecision("architecture-writer", "cat $(ls)");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: bun on another tool blocked", async () => {
+	const d = await bashDecision("architecture-writer", "bun tools/waf-grounding.ts");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: chained write blocked", async () => {
+	const d = await bashDecision("architecture-writer", "just arch-lint && rm -rf src");
+	expect(d?.block).toBe(true);
+});
+test("developer bash: not gated by architect-scope", async () => {
+	await expect(bashDecision("developer", "rm -rf whatever")).resolves.toBeUndefined();
+});
+
+test("architecture-writer bash: --out redirect outside scope blocked", async () => {
+	const d = await bashDecision("architecture-writer", "bun tools/architecture-html.ts docs/architecture --out src/app.ts");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: -o redirect blocked", async () => {
+	const d = await bashDecision("architecture-writer", "just architecture-html docs/architecture -o /tmp/x");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: render without --out still allowed", async () => {
+	await expect(bashDecision("architecture-writer", "bun tools/architecture-html.ts docs/architecture")).resolves.toBeUndefined();
+});

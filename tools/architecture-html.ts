@@ -123,6 +123,27 @@ export function renderMarkdown(md: string): string {
       i++; continue;
     }
 
+    // Fenced code block. A ```mermaid fence becomes <pre class="mermaid"> so the runtime
+    // renders it as a diagram; any other language becomes an ordinary escaped code block.
+    // The body is HTML-escaped either way: the browser decodes entities in textContent, so
+    // mermaid still sees the literal source, and a stray < in a diagram cannot break the DOM.
+    const fence = trimmed.match(/^```+\s*([A-Za-z0-9_-]*)\s*$/);
+    if (fence) {
+      flushPara(); flushList();
+      const lang = fence[1].toLowerCase();
+      const body: string[] = [];
+      i++;
+      while (i < lines.length && !/^```+\s*$/.test(lines[i].trim())) {
+        body.push(lines[i]); i++;
+      }
+      if (i < lines.length) i++; // consume closing fence
+      const code = escapeHtml(body.join("\n"));
+      out.push(lang === "mermaid"
+        ? `<pre class="mermaid">${code}</pre>`
+        : `<pre><code${lang ? ` class="language-${lang}"` : ""}>${code}</code></pre>`);
+      continue;
+    }
+
     // Table: a pipe row followed by a separator row.
     if (trimmed.startsWith("|") && i + 1 < lines.length && isSeparatorRow(lines[i + 1])) {
       flushPara(); flushList();
@@ -247,8 +268,15 @@ export function buildModel(treeDir: string): ArchModel {
 
 // ---------- render ----------
 
-/** Serialise the model into the template at __MODEL__ and inline the shared theme. Fail loud
- *  on a missing injection point. Deterministic: no wall-clock, fixed section order. */
+/** The pinned Mermaid runtime as a string, for inlining. Deterministic: the vendored file is
+ *  byte-stable, so the generated HTML is byte-stable and the freshness hash holds. */
+export function mermaidRuntime(): string {
+  return readFileSync(join(HERE, "lib", "mermaid.min.js"), "utf8");
+}
+
+/** Serialise the model into the template at __MODEL__, inline the shared theme, and inline the
+ *  pinned Mermaid runtime at __MERMAID__. Fail loud on a missing injection point. Deterministic:
+ *  no wall-clock, fixed section order, byte-stable runtime. */
 export function render(template: string, model: ArchModel): string {
   const json = JSON.stringify(model);
   const safe = json.replace(/<\/(script)/gi, "<\\/$1");
@@ -258,7 +286,15 @@ export function render(template: string, model: ArchModel): string {
   if (!template.includes("__MODEL__")) {
     throw new Error("template is missing the __MODEL__ injection point");
   }
-  return inlineTheme(template).replace("__MODEL__", () => safe);
+  // Validate the theme slot before the Mermaid slot so the prior renderer contract holds: a
+  // template missing both reports the theme error first (inlineTheme owns that check).
+  const themed = inlineTheme(template);
+  if (!themed.includes("__MERMAID__")) {
+    throw new Error("template is missing the __MERMAID__ injection point");
+  }
+  return themed
+    .replace("__MERMAID__", () => mermaidRuntime())
+    .replace("__MODEL__", () => safe);
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
