@@ -286,10 +286,13 @@ export function render(template: string, model: ArchModel): string {
   if (!template.includes("__MODEL__")) {
     throw new Error("template is missing the __MODEL__ injection point");
   }
-  if (!template.includes("__MERMAID__")) {
+  // Validate the theme slot before the Mermaid slot so the prior renderer contract holds: a
+  // template missing both reports the theme error first (inlineTheme owns that check).
+  const themed = inlineTheme(template);
+  if (!themed.includes("__MERMAID__")) {
     throw new Error("template is missing the __MERMAID__ injection point");
   }
-  return inlineTheme(template)
+  return themed
     .replace("__MERMAID__", () => mermaidRuntime())
     .replace("__MODEL__", () => safe);
 }

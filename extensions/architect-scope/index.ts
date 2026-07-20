@@ -240,7 +240,15 @@ function scopedBashAllowed(agent: string, command: string): boolean {
 		if (cmd.indexOf("=") !== -1) return false;
 		if (READONLY_CMDS.has(cmd)) continue;
 		const allowedArgs = writers ? writers.get(cmd) : undefined;
-		if (allowedArgs && tokens[1] !== undefined && allowedArgs.has(tokens[1])) continue;
+		if (allowedArgs && tokens[1] !== undefined && allowedArgs.has(tokens[1])) {
+			// The command is an allowed writer, but its output must not be redirected outside
+			// scope. Block any output-destination flag: bun tools/architecture-html.ts --out
+			// <path> writes wherever --out points, which would escape the path gate.
+			if (tokens.some((t) => t === "--out" || t === "-o" || t.indexOf("--out=") === 0)) {
+				return false;
+			}
+			continue;
+		}
 		return false;
 	}
 	return true;

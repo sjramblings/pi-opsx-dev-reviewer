@@ -211,3 +211,15 @@ test("architecture-writer bash: chained write blocked", async () => {
 test("developer bash: not gated by architect-scope", async () => {
 	await expect(bashDecision("developer", "rm -rf whatever")).resolves.toBeUndefined();
 });
+
+test("architecture-writer bash: --out redirect outside scope blocked", async () => {
+	const d = await bashDecision("architecture-writer", "bun tools/architecture-html.ts docs/architecture --out src/app.ts");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: -o redirect blocked", async () => {
+	const d = await bashDecision("architecture-writer", "just architecture-html docs/architecture -o /tmp/x");
+	expect(d?.block).toBe(true);
+});
+test("architecture-writer bash: render without --out still allowed", async () => {
+	await expect(bashDecision("architecture-writer", "bun tools/architecture-html.ts docs/architecture")).resolves.toBeUndefined();
+});
