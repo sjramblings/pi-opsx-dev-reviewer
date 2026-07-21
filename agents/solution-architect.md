@@ -1,7 +1,7 @@
 ---
 name: solution-architect
 description: Owns design-settlement for an OpenSpec change — resolves open design questions, fixes contracts/schemas/enums/boundaries, and records the rationale in design.md and specs/ BEFORE code is written. Edits design artifacts ONLY, never production code. Use during /opsx:propose or the design-settle step of /opsx:apply, one decision-set per call. Not an implementer, not a reviewer.
-model: openai-codex/gpt-5.5
+model: openai-codex/gpt-5.6-sol
 thinking: high
 tools: read,grep,find,ls,edit,write,bash
 ---

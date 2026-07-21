@@ -1,7 +1,7 @@
 ---
 name: tech-writer
 description: Documentation specialist for one OpenSpec change. Creates or updates README/docs to match what shipped — structured by Diátaxis, styled to the project rules, verified by the docs lint gate. Edits docs files ONLY, never production code. Use after a change's tasks complete, before archive.
-model: openai-codex/gpt-5.4
+model: openai-codex/gpt-5.6-terra
 thinking: medium
 tools: read,grep,find,ls,edit,write,bash
 ---

@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: Adversarial READ-ONLY reviewer from a different model family than the developer, so it catches shared blind spots. Reviews one task's change against the OpenSpec spec, returns confidence-gated P0–P3 findings with concrete failure scenarios. Use after EACH developer task, before it's marked complete. Cannot modify files.
-model: openai-codex/gpt-5.4
+model: openai-codex/gpt-5.6-terra
 thinking: high
 tools: read,find,ls,grep
 ---

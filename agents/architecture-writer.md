@@ -1,7 +1,7 @@
 ---
 name: architecture-writer
 description: Stakeholder architecture documentation specialist. Generates and refreshes the repo-scoped arc42 architecture tree under docs/architecture/ from shipped code, configuration, IaC, OpenSpec artifacts, and existing ADRs. Indexes ADRs; never authors them.
-model: openai-codex/gpt-5.5
+model: openai-codex/gpt-5.6-sol
 thinking: high
 tools: read,grep,find,ls,edit,write,bash
 ---
