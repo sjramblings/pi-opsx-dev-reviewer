@@ -223,3 +223,77 @@ test("architecture-writer bash: -o redirect blocked", async () => {
 test("architecture-writer bash: render without --out still allowed", async () => {
 	await expect(bashDecision("architecture-writer", "bun tools/architecture-html.ts docs/architecture")).resolves.toBeUndefined();
 });
+
+// --- reviewer as a gated read-only verifier (B) ---
+// The reviewer reproduces evidence instead of trusting the report of the author. It gets
+// read-only shell plus the deterministic gates, and nothing else.
+
+test("reviewer bash: git diff allowed", async () => {
+	await expect(bashDecision("reviewer", "git diff HEAD")).resolves.toBeUndefined();
+});
+test("reviewer bash: bun test allowed", async () => {
+	await expect(bashDecision("reviewer", "bun test tools/record-verdict.test.ts")).resolves.toBeUndefined();
+});
+test("reviewer bash: just verify-gate allowed", async () => {
+	await expect(bashDecision("reviewer", "just verify-gate")).resolves.toBeUndefined();
+});
+test("reviewer bash: just probe-check allowed", async () => {
+	await expect(bashDecision("reviewer", "just probe-check add-foo")).resolves.toBeUndefined();
+});
+test("reviewer bash: tsc --noEmit allowed", async () => {
+	await expect(bashDecision("reviewer", "tsc --noEmit")).resolves.toBeUndefined();
+});
+test("reviewer bash: bare tsc blocked (could emit)", async () => {
+	const d = await bashDecision("reviewer", "tsc");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: just run-probe blocked (arbitrary bash -c)", async () => {
+	const d = await bashDecision("reviewer", "just run-probe add-foo p1 rm -rf src");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: bun on an arbitrary script blocked", async () => {
+	const d = await bashDecision("reviewer", "bun tools/record-verdict.ts add-foo x.jsonl");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: rm blocked", async () => {
+	const d = await bashDecision("reviewer", "rm -rf src");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: sed -i blocked", async () => {
+	const d = await bashDecision("reviewer", "sed -i s/a/b/ src/app.ts");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: redirection blocked", async () => {
+	const d = await bashDecision("reviewer", "bun test > /tmp/out");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: command substitution blocked", async () => {
+	const d = await bashDecision("reviewer", "cat $(ls)");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: chained mutation blocked", async () => {
+	const d = await bashDecision("reviewer", "just verify-gate && rm -rf src");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: env injection blocked", async () => {
+	const d = await bashDecision("reviewer", "GIT_PAGER=rm git diff");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: backgrounded mutation blocked", async () => {
+	const d = await bashDecision("reviewer", "just verify-gate & rm -rf src");
+	expect(d?.block).toBe(true);
+});
+test("reviewer bash: block reason names the verifier contract", async () => {
+	const d = await bashDecision("reviewer", "rm -rf src");
+	expect(d?.reason).toContain("read-only verifier");
+});
+test("reviewer write resolution is unchanged by the bash grant", async () => {
+	await expect(decisionFor("reviewer", "design.md")).resolves.toBeUndefined();
+	const d = await decisionFor("reviewer", "src/app.ts");
+	expect(d?.block).toBe(true);
+});
+test("spec-reviewer bash: probe-check allowed, arbitrary blocked", async () => {
+	await expect(bashDecision("spec-reviewer", "just probe-check add-foo")).resolves.toBeUndefined();
+	const d = await bashDecision("spec-reviewer", "bun test");
+	expect(d?.block).toBe(true);
+});

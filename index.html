@@ -228,17 +228,20 @@ architecture changed; and mechanical gates verify presence, evidence integrity, 
 pi process; the reviewer roles are read-only by tool allowlist, not by prompt.</p>
 <div class="tablewrap"><table>
 <tr><th>Agent</th><th>Model</th><th>Role</th><th>Writes?</th></tr>
-<tr><td><code>solution-architect</code></td><td><code>openai-codex/gpt-5.5</code></td><td>Settles design; classifies constraints; records MADR ADRs.</td><td>Design artifacts only (path-gated)</td></tr>
-<tr><td><code>spec-reviewer</code></td><td><code>anthropic/claude-opus-4-8</code></td><td>Adversarial red-team of the spec before code (cross-family from the architect).</td><td>Read-only</td></tr>
-<tr><td><code>developer</code></td><td><code>openai-codex/gpt-5.5</code></td><td>Implements exactly one task; supplies raw evidence + a self-check.</td><td>Full tools</td></tr>
-<tr><td><code>reviewer</code></td><td><code>openai-codex/gpt-5.4</code></td><td>Adversarial code review; empirical BLOCK gate; de-biased input.</td><td>Read-only</td></tr>
-<tr><td><code>tech-writer</code></td><td><code>openai-codex/gpt-5.4</code></td><td>Documents what shipped; Diátaxis structure; banned LLM-writing tells.</td><td>Docs files only</td></tr>
-<tr><td><code>architecture-writer</code></td><td><code>anthropic/claude-opus-4-8</code></td><td>Generates and refreshes the repo-scoped arc42 architecture tree with Well-Architected evidence.</td><td><code>docs/architecture/**</code> only</td></tr>
+<tr><td><code>solution-architect</code></td><td><code>openai-codex/gpt-5.6-sol</code></td><td>Settles design; classifies constraints; records MADR ADRs.</td><td>Design artifacts only (path-gated)</td></tr>
+<tr><td><code>spec-reviewer</code></td><td><code>openai-codex/gpt-5.6-terra</code></td><td>Adversarial red-team of the spec before code (intended to be cross-family from the architect; currently is not).</td><td>Read-only</td></tr>
+<tr><td><code>developer</code></td><td><code>openai-codex/gpt-5.6-sol</code></td><td>Implements exactly one task; supplies raw evidence + a self-check.</td><td>Full tools</td></tr>
+<tr><td><code>reviewer</code></td><td><code>openai-codex/gpt-5.6-terra</code></td><td>Adversarial code review; empirical BLOCK gate; de-biased input.</td><td>Read-only</td></tr>
+<tr><td><code>tech-writer</code></td><td><code>openai-codex/gpt-5.6-terra</code></td><td>Documents what shipped; Diátaxis structure; banned LLM-writing tells.</td><td>Docs files only</td></tr>
+<tr><td><code>architecture-writer</code></td><td><code>openai-codex/gpt-5.6-sol</code></td><td>Generates and refreshes the repo-scoped arc42 architecture tree with Well-Architected evidence.</td><td><code>docs/architecture/**</code> only</td></tr>
 </table></div>
-<p class="callout info"><strong>Model note (this machine):</strong> pins are all-OpenAI except <code>spec-reviewer</code>
-and <code>architecture-writer</code> (Anthropic), which keeps genuine cross-family perspectives while remaining reachable here. For a true cross-family
-<em>code</em> review, point <code>reviewer</code> at a non-OpenAI provider too — see the <a href="README.md">README</a>
-Models section for the billing trade-off.</p>
+<p class="callout warn"><strong>Model note (this machine):</strong> every agent is currently pinned to the
+<code>openai-codex</code> provider. <code>gpt-5.6-terra</code> reviewing <code>gpt-5.6-sol</code> is a different
+model but the same family, so a PASS is correlated blindness rather than independent confirmation — the de-bias
+premise the reviewer role rests on does not hold as configured. To restore it, repoint <code>reviewer</code> and
+<code>spec-reviewer</code> at another provider (<code>anthropic/claude-opus-4-8</code> is reachable here); the
+installer now warns when all pins share one provider. See the <a href="README.md">README</a> Models section for the
+billing trade-off.</p>
 
 <h2 id="extensions">Extensions</h2>
 <p class="sub">Copied per-project into <code>&lt;repo&gt;/.pi/extensions/</code>. They enforce the boundaries structurally
@@ -273,7 +276,7 @@ false pass); the guards never skip.</p>
 <tr><td><code>just next &lt;change&gt;</code></td><td>Lifecycle position + the single next command (implement / retro / archive).</td><td>Never</td></tr>
 <tr><td><code>just trust</code> · <code>trust-log</code></td><td>Per-skill autonomy ledger: render tiers, or record a pass/fail. auto = &ge;20 runs &amp; &ge;95%.</td><td>Never</td></tr>
 <tr><td><code>just goals</code></td><td>Re-verify every standing-goal predicate; flip satisfied/VIOLATED; exit non-zero on regression.</td><td>Never</td></tr>
-<tr><td><code>just session-cost &lt;session.jsonl&gt;</code></td><td>Roll up a pi session's cost per model + grand total (the export shows none); flags subagent calls whose cost is TUI-only. <code>--html</code> emits a viewer fragment.</td><td>Never</td></tr>
+<tr><td><code>just session-cost &lt;session.jsonl&gt;</code></td><td>Roll up accepted main-agent and valid persisted subagent usage once per model and grand total (the export shows none). Reports complete or incomplete coverage; uses valid legacy <code>subagentCost</code> annotations only when native child usage is unavailable. <code>--html</code> emits a viewer fragment with escaped dynamic text.</td><td>Never</td></tr>
 <tr><td><code>just tool-events</code></td><td>Mine the guards' blocked-action ledger (and, with <code>--session</code>, retry loops) into candidate learnings for <code>/opsx-retro</code>.</td><td>Never</td></tr>
 <tr><td><code>just arch-lint</code></td><td>Checks the arc42 tree, stated costs, ADR links, Well-Architected IDs, repo evidence, and section completeness.</td><td>Graceful for missing optional lookup sources; absent tree fails</td></tr>
 <tr><td><code>just waf-grounding</code></td><td>Resolves Well-Architected best-practice claims from the synced corpus, defaulting to HIGH-risk scope.</td><td>Never silently; unsynced corpus fails loud</td></tr>

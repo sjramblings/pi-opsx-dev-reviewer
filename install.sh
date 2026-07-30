@@ -49,10 +49,29 @@ install_global() {
   echo "→ Installed /opsx-loop, /opsx-review, /opsx-retro, /opsx-compost, /opsx-advise prompt templates to $PROMPTS_DIR"
 
   # 3. Model sanity check ──────────────────────────────────────────────────────
+  # Read the pins from the agent files rather than restating them here: a hardcoded list
+  # silently goes stale the moment an agent is repointed, which is exactly what happened
+  # (this block still advertised gpt-5.5/gpt-5.4 long after the agents moved to gpt-5.6).
   echo "→ Verify the agent models resolve on this machine (edit the 'model:' line if not):"
-  for m in "gpt-5.5 (architect/developer/architecture-writer)" "gpt-5.4 (reviewer/tech-writer/spec-reviewer)"; do echo "      openai-codex/$m"; done
-  echo "    Cross-family review is stronger: repoint reviewer/spec-reviewer/architecture-writer at a"
-  echo "    non-OpenAI provider (e.g. anthropic/claude-opus-4-8) if you have its key configured."
+  AGENT_LIST="solution-architect developer reviewer tech-writer spec-reviewer architecture-writer evolution-narrator"
+  for a in $AGENT_LIST; do
+    m="$(sed -n 's/^model:[[:space:]]*//p' "$HERE/agents/$a.md" 2>/dev/null | head -1)"
+    printf '      %-20s %s\n' "$a" "${m:-(no model pin)}"
+  done
+
+  # Cross-family review is the whole point of the reviewer role. Check it rather than suggest it.
+  PROVIDERS="$(for a in $AGENT_LIST; do
+    sed -n 's/^model:[[:space:]]*//p' "$HERE/agents/$a.md" 2>/dev/null | head -1 | cut -d/ -f1
+  done | sort -u | grep -v '^$' || true)"
+  PROVIDER_COUNT="$(printf '%s\n' "$PROVIDERS" | grep -c . || true)"
+  if [ "$PROVIDER_COUNT" -le 1 ]; then
+    echo
+    echo "    ⚠ Every agent is pinned to a single provider ($(printf '%s' "$PROVIDERS" | tr '\n' ' '))."
+    echo "      The reviewer then shares a training corpus with the developer it reviews, so a PASS is"
+    echo "      correlated blindness rather than independent confirmation — the de-bias premise the"
+    echo "      reviewer role is built on does not hold. Repoint reviewer/spec-reviewer at another"
+    echo "      provider (e.g. anthropic/claude-opus-4-8) if you have its key configured."
+  fi
   echo "    List what is available with:  pi --list-models"
   echo
   echo "✓ pi-side (global) setup complete."
@@ -74,13 +93,13 @@ install_project() {
   cp "$HERE"/tools/select-learnings.ts "$HERE"/tools/audit-learnings.ts \
      "$HERE"/tools/trust.ts "$HERE"/tools/verify-goals.ts "$HERE"/tools/session-cost.ts \
      "$HERE"/tools/assess-tool-events.ts "$HERE"/tools/waf-grounding.ts \
-     "$HERE"/tools/arch-lint.ts "$HERE"/tools/pylib.ts \
+     "$HERE"/tools/arch-lint.ts "$HERE"/tools/check-doc-contracts.ts "$HERE"/tools/pylib.ts \
      "$HERE"/tools/architecture-html.ts "$HERE"/tools/architecture.template.html \
      "$HERE"/tools/evolution-timeline.ts "$HERE"/tools/evolution-timeline.template.html "$TARGET/tools/"
   mkdir -p "$TARGET/tools/lib"
   cp "$HERE"/tools/lib/theme.ts "$HERE"/tools/lib/theme.css \
      "$HERE"/tools/lib/mermaid.min.js "$HERE"/tools/lib/mermaid.pin.json "$TARGET/tools/lib/"
-  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, pylib, architecture-html, evolution-timeline + templates + shared theme)"
+  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, check-doc-contracts, pylib, architecture-html, evolution-timeline + templates + shared theme)"
 
   # 3. OpenSpec dev-reviewer schema + config. A repo has exactly ONE schema; if this repo
   #    already uses a different one, the dev-reviewer apply flow is mutually exclusive with

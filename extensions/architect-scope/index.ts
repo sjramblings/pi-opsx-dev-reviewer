@@ -49,6 +49,13 @@ const MISSING_POLICY_REASON =
 const OPEN_WRITERS = new Set(["developer", "tech-writer"]);
 const SCOPED_AGENT_NAMES = new Set(["architecture-writer", "evolution-narrator"]);
 
+// Read-only verifier agents. They hold no write tool, so they need no path policy, but they DO
+// need bash: a review that cannot run the gates has to trust the report of the author for every
+// claim it cannot read off disk, which is the failure mode where green mocked tests hide broken
+// code. They are bash-gated by the same allowlist machinery as the scoped writers, and are
+// deliberately NOT added to SCOPED_AGENT_NAMES, which would change write resolution for them.
+const VERIFIER_AGENT_NAMES = new Set(["reviewer", "spec-reviewer"]);
+
 type PathPolicy = {
 	allowedPrefixes: string[];
 	blockReason: string;
@@ -202,6 +209,11 @@ const BASH_REASON =
 	"gate commands. A shell write outside its path scope is blocked -- do the write with the " +
 	"write tool, which is path-gated.";
 
+const VERIFIER_BASH_REASON =
+	"architect-scope: a read-only verifier may run read-only shell plus the deterministic " +
+	"verification gates only (bun test, just verify-gate, just probe-check, tsc --noEmit). It " +
+	"holds no write tool and must never execute an arbitrary command.";
+
 // Read-only commands a scoped agent may run. sed and awk are excluded on purpose: sed -i and
 // awk redirection can write files, which would bypass the write path gate.
 const READONLY_CMDS = new Set([
@@ -217,12 +229,33 @@ const BASH_WS = new RegExp("\\s+");
 // Commands a scoped agent legitimately needs that are not read-only: they write, but only to
 // the scope of that agent. Keyed by agent name; each entry maps a base command to the allowed
 // first argument, so bun/just cannot be turned into an arbitrary-write vector.
+// just run-probe is deliberately absent from every entry below: it executes an arbitrary command
+// through bash -c, so allowlisting it would turn this gate into arbitrary execution. The neutral
+// probe executor stays the job of the orchestrator, not of an agent under review.
 const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 	[
 		"architecture-writer",
 		new Map<string, Set<string>>([
 			["just", new Set(["arch-lint", "architecture-html"])],
 			["bun", new Set(["tools/architecture-html.ts"])],
+		]),
+	],
+	[
+		// The reviewer reproduces evidence rather than trusting it. bun test executes code from
+		// the repo under review, which grants no capability the developer did not already hold:
+		// the property preserved here is that the reviewer cannot AUTHOR a change, not that the
+		// repo is inert. tsc is pinned to --noEmit so it can only typecheck, never emit.
+		"reviewer",
+		new Map<string, Set<string>>([
+			["bun", new Set(["test"])],
+			["just", new Set(["verify-gate", "probe-check"])],
+			["tsc", new Set(["--noEmit"])],
+		]),
+	],
+	[
+		"spec-reviewer",
+		new Map<string, Set<string>>([
+			["just", new Set(["probe-check"])],
 		]),
 	],
 ]);
@@ -262,13 +295,15 @@ export default function (pi: PiEventBus) {
 			// its own render/gate commands; anything else that could write is blocked, so shell
 			// cannot bypass its write path scope.
 			const bashAgent = currentAgent();
-			if (!bashAgent || !SCOPED_AGENT_NAMES.has(bashAgent)) return undefined;
+			const isVerifier = bashAgent ? VERIFIER_AGENT_NAMES.has(bashAgent) : false;
+			const isScoped = bashAgent ? SCOPED_AGENT_NAMES.has(bashAgent) : false;
+			if (!bashAgent || (!isScoped && !isVerifier)) return undefined;
 			const input = event.input ?? {};
 			const command = typeof (input as { command?: unknown }).command === "string"
 				? (input as { command: string }).command
 				: "";
 			if (scopedBashAllowed(bashAgent, command)) return undefined;
-			return block(event, BASH_REASON, command);
+			return block(event, isVerifier ? VERIFIER_BASH_REASON : BASH_REASON, command);
 		}
 		if (event.toolName !== "write" && event.toolName !== "edit") return undefined;
 
