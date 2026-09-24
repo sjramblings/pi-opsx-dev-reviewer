@@ -6,7 +6,7 @@
  * docs/pi-compatibility.md carries the single "Last verified against pi X.Y.Z (date)" line.
  * Any other tracked file that says something was verified or tested against, with, or on a
  * specific pi version must name that version. Dated history such as "run against pi 0.79.9"
- * is not a claim. openspec/ is skipped: proposals and specs quote versions as examples.
+ * is not a claim. openspec/ and *.test.ts are skipped: they quote versions as examples.
  *
  * It also prints the installed `pi --version` next to the canonical line. A difference is
  * reported, never failed: the line is a fallback, not a ceiling.
@@ -56,6 +56,8 @@ export function claimFindings(files: { path: string; text: string }[], canonical
 
 export function isScanned(path: string): boolean {
 	if (SKIPPED_FILES.has(path)) return false;
+	// Test fixtures quote example claims on purpose; they are not claims about this kit.
+	if (path.endsWith(".test.ts")) return false;
 	if (SKIPPED_PREFIXES.some((p) => path.startsWith(p))) return false;
 	return SCANNED_EXTENSIONS.some((ext) => path.endsWith(ext));
 }

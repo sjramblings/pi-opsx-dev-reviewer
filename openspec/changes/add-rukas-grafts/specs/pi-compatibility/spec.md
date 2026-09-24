@@ -15,7 +15,7 @@
 ### Requirement: Verified-against claims elsewhere must agree
 
 A verified-against claim SHALL name the canonical version. This covers any tracked file outside
-archived changes and probe transcripts that says something was verified or tested against, with,
+`openspec/` and test files that says something was verified or tested against, with,
 or on a specific pi version.
 
 #### Scenario: A disagreeing claim fails

@@ -62,6 +62,7 @@ test("openspec, vendored code, and the canonical doc are not scanned", () => {
 	expect(isScanned("docs/pi-compatibility.md")).toBe(false);
 	expect(isScanned("tools/vendor/x/index.js")).toBe(false);
 	expect(isScanned("assets/logo.png")).toBe(false);
+	expect(isScanned("tools/claim-scan.test.ts")).toBe(false);
 });
 
 test("the installed version is compared, never failed", () => {

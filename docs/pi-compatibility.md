@@ -13,8 +13,8 @@ live shakedown").
 That line is the single source of truth. Any other file that says something was verified or
 tested against, with, or on a specific pi version must name the same version, and
 `bun test tools/pi-compat.test.ts` fails when one does not. Dated history ("run against pi
-0.79.9 on 2026-07-08") is not a claim and stays as written. Files under `openspec/` are
-proposals and specs that quote versions as examples, so the check skips them.
+0.79.9 on 2026-07-08") is not a claim and stays as written. Files under `openspec/` and test
+files (`*.test.ts`) quote versions as examples, so the check skips them.
 
 ## What this line means
 
