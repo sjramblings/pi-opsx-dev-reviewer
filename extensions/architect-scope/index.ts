@@ -212,6 +212,7 @@ const BASH_REASON =
 const VERIFIER_BASH_REASON =
 	"architect-scope: a read-only verifier may run read-only shell plus the deterministic " +
 	"verification gates only (bun test, just verify-gate, just probe-check, just docs-lint, " +
+	"just diff-gate, just claim-scan, " +
 	"tsc --noEmit). It " +
 	"holds no write tool and must never execute an arbitrary command.";
 
@@ -250,7 +251,7 @@ const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 		"reviewer",
 		new Map<string, Set<string>>([
 			["bun", new Set(["test"])],
-			["just", new Set(["verify-gate", "probe-check", "docs-lint"])],
+			["just", new Set(["verify-gate", "probe-check", "docs-lint", "diff-gate", "claim-scan"])],
 			["tsc", new Set(["--noEmit"])],
 		]),
 	],

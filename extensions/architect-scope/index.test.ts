@@ -356,3 +356,17 @@ test("spec-reviewer bash: docs-lint mutation surfaces remain blocked", async () 
 	await expect(bashDecision("spec-reviewer", "just\tdocs-lint")).resolves.toMatchObject({ block: true });
 	await expect(bashDecision("spec-reviewer", "just docs-lint ")).resolves.toMatchObject({ block: true });
 });
+test("reviewer bash: just diff-gate and just claim-scan allowed", async () => {
+	await expect(bashDecision("reviewer", "just diff-gate --change add-foo")).resolves.toBeUndefined();
+	await expect(bashDecision("reviewer", "just diff-gate --base main --change add-foo")).resolves.toBeUndefined();
+	await expect(bashDecision("reviewer", "just claim-scan")).resolves.toBeUndefined();
+	await expect(bashDecision("reviewer", "just claim-scan --base main")).resolves.toBeUndefined();
+});
+test("reviewer bash: diff-gate and claim-scan cannot chain or redirect a write", async () => {
+	expect((await bashDecision("reviewer", "just diff-gate && rm -rf src"))?.block).toBe(true);
+	expect((await bashDecision("reviewer", "just claim-scan > src/app.ts"))?.block).toBe(true);
+	expect((await bashDecision("reviewer", "just claim-scan; rm -rf src"))?.block).toBe(true);
+});
+test("spec-reviewer bash: diff-gate is not granted", async () => {
+	expect((await bashDecision("spec-reviewer", "just diff-gate"))?.block).toBe(true);
+});

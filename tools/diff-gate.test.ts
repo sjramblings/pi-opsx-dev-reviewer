@@ -143,3 +143,25 @@ test("CLI end to end: fails on a committed skip and a falsely green task, passes
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("a --base that looks like a git option is refused and writes nothing", () => {
+	const root = mkdtempSync(join(tmpdir(), "diff-gate-inject-"));
+	const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+	const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: root, env });
+	const run = (args: string[]) => Bun.spawnSync(["bun", join(import.meta.dir, "diff-gate.ts"), ...args], { cwd: root });
+	try {
+		git("init", "-q", "-b", "main");
+		writeFileSync(join(root, "a.txt"), "a\n");
+		git("add", "-A");
+		git("commit", "-q", "-m", "base");
+		writeFileSync(join(root, "a.txt"), "b\n");
+		const injected = run(["--base", "--output=pwned.txt"]);
+		expect(injected.exitCode).toBe(2);
+		expect(Bun.file(join(root, "pwned.txt")).size).toBe(0);
+		expect(run(["--base", "no-such-ref"]).exitCode).toBe(2);
+		expect(run(["--base", "main", "--change", "../x"]).exitCode).toBe(2);
+		expect(run(["--base", "main"]).exitCode).toBe(0);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});

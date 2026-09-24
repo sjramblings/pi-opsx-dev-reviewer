@@ -19,6 +19,7 @@
 
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
+import { resolveBase } from "./diff-gate.ts";
 
 const VERSION = /\bv?(\d+\.\d+\.\d+)\b/g;
 const QUANTITY = /\b(\d+(?:\.\d+)?)\s?(KB|MB|GB|TB|KiB|MiB|GiB|TiB|ms)\b/g;
@@ -117,15 +118,6 @@ function git(args: string[]): { ok: boolean; out: string } {
 	return { ok: run.exitCode === 0, out: run.stdout.toString() };
 }
 
-function resolveBase(explicit: string | undefined): string {
-	if (explicit) return explicit;
-	for (const candidate of ["origin/main", "main"]) {
-		const mb = git(["merge-base", "HEAD", candidate]);
-		if (mb.ok && mb.out.trim() !== "") return mb.out.trim();
-	}
-	throw new Error("claim-scan: no --base given and no merge-base with origin/main or main");
-}
-
 function isFile(path: string): boolean {
 	return existsSync(path) && lstatSync(path).isFile();
 }
@@ -136,7 +128,7 @@ if (import.meta.main) {
 		if (argv.length !== 0 && !(argv.length === 2 && argv[0] === "--base")) {
 			throw new Error("claim-scan: usage: claim-scan [--base <ref>]");
 		}
-		const base = resolveBase(argv[1]);
+		const base = resolveBase(argv[1], "claim-scan");
 		const tracked = git(["diff", "--no-color", "--no-ext-diff", "-U0", base, "--", "*.md"]);
 		if (!tracked.ok) throw new Error(`claim-scan: git diff ${base} failed`);
 		const untracked = git(["ls-files", "--others", "--exclude-standard"]).out.split("\n").filter(Boolean);

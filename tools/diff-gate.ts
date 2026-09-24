@@ -205,13 +205,30 @@ function git(args: string[]): { ok: boolean; out: string } {
 	return { ok: run.exitCode === 0, out: run.stdout.toString() };
 }
 
-function resolveBase(explicit: string | undefined): string {
-	if (explicit) return explicit;
+/**
+ * Resolve the base to a commit SHA. The reviewer may run this gate, so a --base value must
+ * never reach git as an option: "--base --output=x" would make git diff write a file.
+ */
+export function resolveBase(explicit: string | undefined, tool = "diff-gate"): string {
+	if (explicit !== undefined) {
+		if (explicit === "" || explicit.startsWith("-")) throw new Error(`${tool}: --base must be a git ref, got "${explicit}"`);
+		const sha = git(["rev-parse", "--verify", "--quiet", "--end-of-options", `${explicit}^{commit}`]);
+		if (!sha.ok || sha.out.trim() === "") throw new Error(`${tool}: --base ${explicit} is not a commit`);
+		return sha.out.trim();
+	}
 	for (const candidate of ["origin/main", "main"]) {
 		const mb = git(["merge-base", "HEAD", candidate]);
 		if (mb.ok && mb.out.trim() !== "") return mb.out.trim();
 	}
-	throw new Error("diff-gate: no --base given and no merge-base with origin/main or main");
+	throw new Error(`${tool}: no --base given and no merge-base with origin/main or main`);
+}
+
+/** A change name is one path segment, like record-verdict requires. */
+function checkChangeName(change: string): string {
+	if (change === "" || change === "." || change === ".." || change.includes("/") || change.includes("\\") || change.startsWith("-")) {
+		throw new Error(`diff-gate: --change must be a single change-folder name, got "${change}"`);
+	}
+	return change;
 }
 
 /** The working tree diff against base, with untracked files rendered as all-added. */
@@ -262,7 +279,7 @@ if (import.meta.main) {
 		}
 
 		if (args.change !== undefined) {
-			const tasksPath = join("openspec", "changes", args.change, "tasks.md");
+			const tasksPath = join("openspec", "changes", checkChangeName(args.change), "tasks.md");
 			if (!existsSync(tasksPath)) throw new Error(`diff-gate: no ${tasksPath}`);
 			for (const f of falselyGreen(readFileSync(tasksPath, "utf8"), changed)) {
 				failed = true;
@@ -273,7 +290,7 @@ if (import.meta.main) {
 		}
 
 		const scope = args.change === undefined ? "skip ratchet" : "skip ratchet + falsely green";
-		console.log(`diff-gate: ${failed ? "FAIL" : "clean"} (${scope}, base ${/^[0-9a-f]{40}$/.test(base) ? base.slice(0, 12) : base}, ${changed.length} changed file(s))`);
+		console.log(`diff-gate: ${failed ? "FAIL" : "clean"} (${scope}, base ${args.base ?? "merge-base"} @ ${base.slice(0, 12)}, ${changed.length} changed file(s))`);
 		process.exit(failed ? 1 : 0);
 	} catch (error: unknown) {
 		console.error(error instanceof Error ? error.message : String(error));
