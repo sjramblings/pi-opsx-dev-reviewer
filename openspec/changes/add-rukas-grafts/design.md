@@ -2,7 +2,7 @@
 
 ## Context
 
-pi-rukas (Apache-2.0, by Janni Turunen) is a pi extension that moved most of its pipeline
+pi-rukas (Apache-2.0; author Janni Turunen per its [extension/package.json](https://github.com/trail-openers/pi-rukas/blob/cd6cb5f/extension/package.json)) is a pi extension that moved most of its pipeline
 out of prompts and into TypeScript gates, each justified by a measured incident recorded in
 its source comments. This change ports five of those ideas. No pi-rukas code is copied; each
 gate is re-implemented against this kit's own conventions (bun tools with tests, load-breaker

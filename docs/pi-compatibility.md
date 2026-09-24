@@ -27,7 +27,8 @@ files (`*.test.ts`) quote versions as examples, so the check skips them.
 
 pi 0.79.9 silently disabled any extension containing a regex literal or an apostrophe (see
 [SHAKEDOWN.md](../SHAKEDOWN.md)). On 2026-09-24 a file containing both loaded without error
-through pi 0.83.0's own `loadExtensions`, so the defect does not reproduce there. The
+through pi 0.83.0's own `loadExtensions`, so the defect does not reproduce there (see
+"pi 0.83.0 loader probe" in [SHAKEDOWN.md](../SHAKEDOWN.md)). The
 load-breaker rules in `just check-extensions` stay in force, because the kit does not declare
 a minimum pi version.
 

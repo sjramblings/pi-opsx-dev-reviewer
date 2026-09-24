@@ -298,8 +298,10 @@ without a model, and fail with the file and line that tripped them.
 | `just pi-compat` | Any "verified against pi X" claim that disagrees with [docs/pi-compatibility.md](docs/pi-compatibility.md). It also prints your installed pi next to that line, without failing on a difference. | You, when you bump pi |
 
 `diff-gate` and `claim-scan` compare against the merge-base with `origin/main` by default;
-pass `--base <ref>` for a stacked branch. Both are read-only, which is why the reviewer may run
-them. The ideas come from [pi-rukas](https://github.com/trail-openers/pi-rukas) (Apache-2.0); the
+pass `--base <ref>` for a stacked branch. Both tools only read, and the reviewer may run them
+under two guards: the recipes hand arguments to the tool as positional parameters, so the
+shell never re-parses them, and `architect-scope` admits only plain ref-shaped arguments after
+any `just` recipe the reviewer runs. The ideas come from [pi-rukas](https://github.com/trail-openers/pi-rukas) (Apache-2.0); the
 decision record is [ADR 0006](docs/decisions/0006-port-pi-rukas-gates.md).
 
 ## Continual learning (the harness gets smarter each pass)
