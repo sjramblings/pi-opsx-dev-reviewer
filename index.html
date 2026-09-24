@@ -284,7 +284,7 @@ false pass); the guards never skip.</p>
 <tr><td><code>just verify-gate</code></td><td>Deterministic pre-review pass: <code>tsc</code>/<code>eslint</code>/<code>semgrep</code>. The LLM reviewer only judges what a linter cannot.</td><td>Graceful</td></tr>
 <tr><td><code>just probe-check &lt;change&gt;</code></td><td>Every task in <code>tasks.md</code> must carry a <code>probe:</code> line (frozen before apply).</td><td>Never</td></tr>
 <tr><td><code>just diff-gate [--change &lt;change&gt;]</code></td><td>Fails on a test skip or focus marker the diff added, and on a ticked task that changed none of its declared source files. The reviewer runs it on every task.</td><td>Never</td></tr>
-<tr><td><code>just claim-scan</code></td><td>Fails on a version or size added to a doc that no other file contains, or a backticked path that does not exist. The tech-writer runs it before returning.</td><td>Never</td></tr>
+<tr><td><code>just claim-scan</code></td><td>Fails on a version or size added to a doc that no other file contains, or a file path in backticks that does not exist. The tech-writer runs it before returning.</td><td>Never</td></tr>
 <tr><td><code>just pi-compat</code></td><td>Kit-only. Prints the last verified pi version next to the installed one, and fails if any other verified-against claim disagrees.</td><td>Never</td></tr>
 <tr><td><code>just run-probe &lt;change&gt; &lt;id&gt; &lt;cmd&gt;</code></td><td>Neutral executor: runs the probe, writes a sha256-attested transcript to the ledger.</td><td>Never</td></tr>
 <tr><td><code>just archive-change &lt;change&gt;</code></td><td>Sanctioned close-out: runs the ledger gate, promotion guard, OpenSpec archival, then lint normalisation for promoted specs.</td><td>Never</td></tr>
