@@ -13,3 +13,7 @@ styles/write-good/
 /build/architecture/.structurizr-lock
 /build/architecture/.structurizr-stage-*/
 # <<< structurizr (managed by install.sh) <<<
+
+# The vendored, hash-pinned XML parser is source, not an install artefact (see
+# tools/vendor/structurizr-xml/NOTICE.md and tools/structurizr/pin.json xmlParser.files).
+!tools/vendor/structurizr-xml/node_modules/
