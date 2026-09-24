@@ -32,6 +32,7 @@
   "ignores": [
     "node_modules",
     ".git",
+    ".cursor/**",
     "styles/Google/**",
     "styles/write-good/**",
     "openspec/changes/**/review-log.md"

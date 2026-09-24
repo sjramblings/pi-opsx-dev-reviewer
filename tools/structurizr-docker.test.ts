@@ -369,3 +369,32 @@ test("a real hung Docker process is terminated at its bound", async () => {
 	expect(result.timedOut).toBe(true);
 	expect(Date.now() - started).toBeLessThan(20_000);
 }, 30_000);
+
+test("a repository checked out under /home (GitHub Linux runners) can mount its model", () => {
+	const argv = buildRunArgv({
+		name: allocateName(),
+		target: "linux/amd64",
+		reference: pin.image.reference,
+		uid: 1,
+		gid: 1,
+		modelMount: "/home/runner/work/repo/repo/docs/architecture/structurizr/workspace.dsl:/workspace/workspace.dsl:ro",
+		args: ["version"],
+	});
+	expect(argv).toContain("/home/runner/work/repo/repo/docs/architecture/structurizr/workspace.dsl:/workspace/workspace.dsl:ro");
+});
+
+test("a home directory itself, or anything under a credential directory, is still refused", () => {
+	for (const source of ["/home", "/home/runner", "/root/x", "/home/runner/.ssh/id", "/home/runner/.aws/config", "/Users/x", "/home/runner/.config/gh/hosts.yml", "/home/runner/.gnupg"]) {
+		expect(() =>
+			buildRunArgv({
+				name: allocateName(),
+				target: "linux/arm64",
+				reference: pin.image.reference,
+				uid: 1,
+				gid: 1,
+				modelMount: `${source}:/workspace/workspace.dsl:ro`,
+				args: ["version"],
+			}),
+		).toThrow("refusing to mount");
+	}
+});

@@ -66,26 +66,33 @@ export type ContainerOptions = {
 	args: string[];
 };
 
-/** Mount targets that would breach the boundary if they ever appeared. */
-const FORBIDDEN_MOUNT_SOURCES = [
-	"/var/run/docker.sock",
-	"/run/docker.sock",
-	"/root",
-	"/home",
-	"/.docker",
-	"/.aws",
-	"/.ssh",
-];
+/** Mount sources refused together with everything beneath them. */
+const FORBIDDEN_MOUNT_TREES = ["/var/run/docker.sock", "/run/docker.sock", "/root"];
 
+/** Home roots: the root and a whole home directory (/home/<user>) are refused. */
+const HOME_ROOTS = ["/home", "/Users"];
+
+/** Credential directories refused wherever they appear in the path. */
+const CREDENTIAL_SEGMENTS = new Set([".docker", ".aws", ".ssh", ".gnupg", ".kube"]);
+
+// A blanket "/home" refusal also refused the repository itself on GitHub Linux runners, which
+// check out under /home/runner/work/. The boundary is the credentials and the whole home
+// directory, not every path that happens to live under a home root.
 const assertMountSafe = (mount: string): void => {
 	const source = mount.split(":")[0];
-	for (const forbidden of FORBIDDEN_MOUNT_SOURCES) {
-		if (source === forbidden || source.startsWith(`${forbidden}/`)) {
-			fail("DEPENDENCY", "DOCKER", `refusing to mount ${source}`);
-		}
+	const refuse = (): never => fail("DEPENDENCY", "DOCKER", `refusing to mount ${source}`);
+	for (const forbidden of FORBIDDEN_MOUNT_TREES) {
+		if (source === forbidden || source.startsWith(`${forbidden}/`)) refuse();
 	}
-	if (source.endsWith("/.docker") || source.endsWith("/.aws") || source.endsWith("/.ssh")) {
-		fail("DEPENDENCY", "DOCKER", `refusing to mount ${source}`);
+	const segments = source.split("/").filter((s) => s !== "");
+	for (const root of HOME_ROOTS) {
+		const rootSegments = root.split("/").filter((s) => s !== "");
+		const underRoot = rootSegments.every((s, i) => segments[i] === s);
+		if (underRoot && segments.length <= rootSegments.length + 1) refuse();
+	}
+	for (let i = 0; i < segments.length; i++) {
+		if (CREDENTIAL_SEGMENTS.has(segments[i] ?? "")) refuse();
+		if (segments[i] === ".config" && segments[i + 1] === "gh") refuse();
 	}
 };
 
