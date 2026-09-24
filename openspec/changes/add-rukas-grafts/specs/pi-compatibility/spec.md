@@ -4,8 +4,8 @@
 
 ### Requirement: One canonical verified-against Pi version
 
-`docs/pi-compatibility.md` SHALL contain exactly one line of the form
-`Last verified against pi X.Y.Z (YYYY-MM-DD)`, naming the evidence for it.
+`docs/pi-compatibility.md` SHALL contain exactly one level-two heading of the form
+`## Last verified against pi X.Y.Z (YYYY-MM-DD)`, followed by the evidence for it.
 
 #### Scenario: The canonical line parses
 

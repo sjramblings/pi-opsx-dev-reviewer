@@ -21,7 +21,7 @@ import { existsSync, lstatSync, readFileSync } from "node:fs";
 export const CANONICAL_DOC = "docs/pi-compatibility.md";
 
 const CANONICAL_LINE = /^## Last verified against pi (\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)$/gm;
-const CLAIM = /\b(?:verified|tested)\s+(?:against|with|on)\s+pi\s+v?(\d+\.\d+\.\d+)/gi;
+const CLAIM = /\b(?:verified|tested)\s+(?:against|with|on)\s+pi\s+v?(\d+\.\d+(?:\.\d+)?)\b/gi;
 const SCANNED_EXTENSIONS = [".md", ".ts", ".sh", ".yaml", ".yml", ".json", ".html"];
 const SKIPPED_PREFIXES = ["openspec/", "node_modules/", "tools/vendor/"];
 const SKIPPED_FILES = new Set([CANONICAL_DOC, "tools/pi-compat.ts", "tools/pi-compat.test.ts"]);

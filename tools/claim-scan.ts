@@ -80,6 +80,8 @@ export function scanClaims(
 		for (const p of pathTokens(line.text)) {
 			const fromRoot = normalize(p);
 			const fromDoc = normalize(join(dirname(line.file), p));
+			// A path that resolves outside the repository is not a repo claim; never probe it.
+			if (fromRoot.startsWith("..") && fromDoc.startsWith("..")) continue;
 			if (!pathExists(fromRoot) && !pathExists(fromDoc)) {
 				findings.push({ file: line.file, line: line.line, token: p, kind: "missing-path" });
 			}

@@ -27,6 +27,10 @@ test("a disagreeing verified-against claim is reported with its location", () =>
 	]);
 });
 
+test("a two-part version claim is checked too", () => {
+	expect(claimFindings([{ path: "a.md", text: "tested against pi 0.79" }], "0.83.0").map((f) => f.version)).toEqual(["0.79"]);
+});
+
 test("claim wording variants are all recognised", () => {
 	const text = ["Verified against pi 0.1.0", "verified on pi v0.2.0", "tested against pi 0.3.0"].join("\n");
 	expect(claimFindings([{ path: "x.md", text }], "9.9.9").map((f) => f.version)).toEqual([

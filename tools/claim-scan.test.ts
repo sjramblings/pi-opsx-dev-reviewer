@@ -43,6 +43,17 @@ test("a path relative to the doc resolves", () => {
 	expect(scanClaims([line("see `../SHAKEDOWN.md`", "docs/a.md")], corpus, exists(["SHAKEDOWN.md"]))).toEqual([]);
 });
 
+test("a path that resolves outside the repository is not probed", () => {
+	const corpus = new Map([["README.md", ""]]);
+	let probed = 0;
+	const spy = (p: string) => {
+		probed++;
+		return p === "never";
+	};
+	expect(scanClaims([line("see `../../../etc/hosts.x`")], corpus, spy)).toEqual([]);
+	expect(probed).toBe(0);
+});
+
 test("non-path code spans and placeholders are ignored", () => {
 	expect(pathTokens("run `just diff-gate` then `bun test` in `<repo>/x/y.ts` or `tools/*.ts`")).toEqual([]);
 	expect(pathTokens("see `tools/diff-gate.ts` and `./docs/a.md`")).toEqual(["tools/diff-gate.ts", "./docs/a.md"]);
