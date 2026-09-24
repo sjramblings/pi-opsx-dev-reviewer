@@ -52,7 +52,7 @@
 ## 5. Claim scan and agent wiring (spec: docs-claim-scan)
 
 - [ ] 5.1 Add `tools/claim-scan.ts` with tests and a `just claim-scan` recipe.
-      files: `tools/claim-scan.ts`, `tools/claim-scan.test.ts`, `justfile.opsx`
+      files: `tools/claim-scan.ts`, `tools/claim-scan.test.ts`, `justfile.opsx`, `install.sh`
       probe: `bun test tools/claim-scan.test.ts` passes for invented size, backed version, and missing path.
       out-of-scope: judging whether a backed claim is true.
       spec: `docs-claim-scan`

@@ -587,6 +587,11 @@ verify-gate:
 diff-gate *flags:
     @bun tools/diff-gate.ts {{flags}}
 
+# Claim scan. Flags version numbers and sizes added to Markdown docs that no other file backs,
+# and backticked relative paths that do not exist. Read-only. --base <ref> picks the base.
+claim-scan *flags:
+    @bun tools/claim-scan.ts {{flags}}
+
 # Pre-committed probe convention: every task line in a change tasks.md must be followed by
 # a "probe:" line (the frozen acceptance check, written BEFORE apply). Fails if any lacks one.
 probe-check change:
