@@ -370,3 +370,24 @@ test("reviewer bash: diff-gate and claim-scan cannot chain or redirect a write",
 test("spec-reviewer bash: diff-gate is not granted", async () => {
 	expect((await bashDecision("spec-reviewer", "just diff-gate"))?.block).toBe(true);
 });
+test("reviewer bash: escaped just-argument payloads are blocked (command execution via just re-parse)", async () => {
+	for (const payload of [
+		"just diff-gate \\$\\(touch\\ /tmp/pwn\\)",
+		"just claim-scan $'\\x24\\x28touch /tmp/pwn\\x29'",
+		"just probe-check \\$\\(touch\\ /tmp/pwn\\)",
+		"just diff-gate --base main\;touch",
+		"just claim-scan --output=/tmp/x",
+	]) {
+		expect((await bashDecision("reviewer", payload))?.block).toBe(true);
+	}
+});
+test("reviewer bash: a no-parameter recipe cannot chain further recipes", async () => {
+	expect((await bashDecision("reviewer", "just verify-gate run-probe add-foo p1 touch"))?.block).toBe(true);
+	expect((await bashDecision("reviewer", "just verify-gate probe-check add-foo"))?.block).toBe(true);
+	await expect(bashDecision("reviewer", "just verify-gate")).resolves.toBeUndefined();
+});
+test("architecture-writer bash: arch-lint takes no arguments; architecture-html takes a plain path", async () => {
+	expect((await bashDecision("architecture-writer", "just arch-lint run-probe x y z"))?.block).toBe(true);
+	await expect(bashDecision("architecture-writer", "just architecture-html docs/architecture")).resolves.toBeUndefined();
+	expect((await bashDecision("architecture-writer", "just architecture-html \\$\\(id\\)"))?.block).toBe(true);
+});

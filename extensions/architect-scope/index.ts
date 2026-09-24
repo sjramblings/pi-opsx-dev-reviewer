@@ -263,6 +263,24 @@ const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 	],
 ]);
 
+// just re-parses recipe arguments: a recipe that interpolates them into its shell body turns an
+// escaped payload (backslash-escaped or ANSI-C quoted) into live command substitution, which the
+// literal BASH_DANGEROUS check above cannot see. So every argument after an allowed just recipe
+// must be a plain ref-shaped token, and a recipe that takes no parameters must get none -- extra
+// tokens make just run them as further recipes (verify-gate run-probe ... reached bash -c).
+const JUST_SAFE_ARG = new RegExp("^[A-Za-z0-9._/@^~-]+$");
+const JUST_NO_ARG_RECIPES = new Set(["verify-gate", "docs-lint", "arch-lint"]);
+const JUST_FLAG_ARGS = new Set(["--base", "--change"]);
+
+function justArgsSafe(recipe: string, args: string[]): boolean {
+	if (JUST_NO_ARG_RECIPES.has(recipe)) return args.length === 0;
+	for (const arg of args) {
+		if (!JUST_SAFE_ARG.test(arg)) return false;
+		if (arg.indexOf("-") === 0 && !JUST_FLAG_ARGS.has(arg)) return false;
+	}
+	return true;
+}
+
 function scopedBashAllowed(agent: string, command: string): boolean {
 	if (typeof command !== "string" || command.trim() === "") return false;
 	// Shell line breaks separate commands just like semicolons. Reject them before tokenizing
@@ -284,6 +302,7 @@ function scopedBashAllowed(agent: string, command: string): boolean {
 			if (cmd === "just" && tokens[1] === "docs-lint" && command !== "just docs-lint") {
 				return false;
 			}
+			if (cmd === "just" && !justArgsSafe(tokens[1], tokens.slice(2))) return false;
 			// The command is an allowed writer, but its output must not be redirected outside
 			// scope. Block any output-destination flag: bun tools/architecture-html.ts --out
 			// <path> writes wherever --out points, which would escape the path gate.

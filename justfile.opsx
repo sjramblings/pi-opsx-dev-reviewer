@@ -584,13 +584,17 @@ verify-gate:
 # Diff gate. Fails on net-new test skip/focus markers in the diff and, with --change <name>, on
 # a ticked task whose declared source files are all unchanged. Read-only. --base <ref> picks
 # the base (default: merge-base with origin/main).
+# Arguments reach the tool as positional parameters ("$@"), never re-parsed by the shell:
+# the reviewer may run this recipe, so an unquoted {{flags}} would be command execution.
+[positional-arguments]
 diff-gate *flags:
-    @bun tools/diff-gate.ts {{flags}}
+    @bun tools/diff-gate.ts "$@"
 
 # Claim scan. Flags version numbers and sizes added to Markdown docs that no other file backs,
 # and backticked relative paths that do not exist. Read-only. --base <ref> picks the base.
+[positional-arguments]
 claim-scan *flags:
-    @bun tools/claim-scan.ts {{flags}}
+    @bun tools/claim-scan.ts "$@"
 
 # Pre-committed probe convention: every task line in a change tasks.md must be followed by
 # a "probe:" line (the frozen acceptance check, written BEFORE apply). Fails if any lacks one.
