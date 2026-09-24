@@ -28,7 +28,7 @@ EVIDENCE CHECK: tsc clean + 12/12 tests exercise the changed branch—yes
 > independent (non-forked) Claude Opus agent. The planned cross-vendor pass did not run: the
 > codex CLI failed its models refresh (`unknown variant max`). Treat both passes as
 > same-family review. Pass 1 reviewed `wip/2026-08-snapshot..8535fa8`; pass 2 reviewed
-> `..d3a19e5`. Findings are summarised; the probes named were run by the reviewer in
+> `..d3a19e5`. Findings are condensed; the probes named were run by the reviewer in
 > scratch clones.
 
 ## Task 1.1
@@ -82,7 +82,7 @@ VERDICT: PASS
 ## Task 5.1
 
 FINDINGS (most severe first):
-- P3 CONFIRMED tools/claim-scan.ts Backticked `..` paths were probed outside the repository.
+- P3 CONFIRMED tools/claim-scan.ts Paths in backticks containing `..` were probed outside the repository.
 
 EVIDENCE CHECK: claim-scan tests pass; `just claim-scan` clean on the branch.
 
