@@ -391,3 +391,8 @@ test("architecture-writer bash: arch-lint takes no arguments; architecture-html 
 	await expect(bashDecision("architecture-writer", "just architecture-html docs/architecture")).resolves.toBeUndefined();
 	expect((await bashDecision("architecture-writer", "just architecture-html \\$\\(id\\)"))?.block).toBe(true);
 });
+test("reviewer bash: a fixed-arity recipe cannot chain a second recipe through surplus arguments", async () => {
+	expect((await bashDecision("reviewer", "just probe-check add-foo run-probe add-foo p1 touch /tmp/x"))?.block).toBe(true);
+	expect((await bashDecision("architecture-writer", "just architecture-html docs/architecture run-probe a b touch"))?.block).toBe(true);
+	await expect(bashDecision("reviewer", "just probe-check add-foo")).resolves.toBeUndefined();
+});

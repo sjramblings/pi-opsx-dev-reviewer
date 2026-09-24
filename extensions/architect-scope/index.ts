@@ -268,12 +268,24 @@ const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 // literal BASH_DANGEROUS check above cannot see. So every argument after an allowed just recipe
 // must be a plain ref-shaped token, and a recipe that takes no parameters must get none -- extra
 // tokens make just run them as further recipes (verify-gate run-probe ... reached bash -c).
+// Arity matters as much as content: surplus arguments after a fixed-arity recipe are read by just
+// as further recipe names, so probe-check x run-probe ... would reach bash -c with safe tokens.
+// Only a variadic recipe (its last parameter takes every remaining argument) may take more.
 const JUST_SAFE_ARG = new RegExp("^[A-Za-z0-9._/@^~-]+$");
-const JUST_NO_ARG_RECIPES = new Set(["verify-gate", "docs-lint", "arch-lint"]);
+const JUST_MAX_ARGS = new Map<string, number>([
+	["verify-gate", 0],
+	["docs-lint", 0],
+	["arch-lint", 0],
+	["probe-check", 1],
+	["architecture-html", 1],
+]);
+const JUST_VARIADIC_RECIPES = new Set(["diff-gate", "claim-scan"]);
 const JUST_FLAG_ARGS = new Set(["--base", "--change"]);
 
 function justArgsSafe(recipe: string, args: string[]): boolean {
-	if (JUST_NO_ARG_RECIPES.has(recipe)) return args.length === 0;
+	if (!JUST_VARIADIC_RECIPES.has(recipe) && args.length > (JUST_MAX_ARGS.get(recipe) ?? 0)) {
+		return false;
+	}
 	for (const arg of args) {
 		if (!JUST_SAFE_ARG.test(arg)) return false;
 		if (arg.indexOf("-") === 0 && !JUST_FLAG_ARGS.has(arg)) return false;
