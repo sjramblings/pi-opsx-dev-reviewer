@@ -43,7 +43,7 @@
 
 - [ ] 4.1 Add `docs/pi-compatibility.md`, `tools/pi-compat.ts` with its drift test, and a
       `just pi-compat` recipe.
-      files: `docs/pi-compatibility.md`, `tools/pi-compat.ts`, `tools/pi-compat.test.ts`, `justfile.opsx`
+      files: `docs/pi-compatibility.md`, `tools/pi-compat.ts`, `tools/pi-compat.test.ts`, `justfile`
       probe: `bun test tools/pi-compat.test.ts` passes, including a real-repo drift check returning no findings and a disagreeing-claim fixture that is reported; `just pi-compat` exits 0.
       out-of-scope: a live Pi event-shape test.
       spec: `pi-compatibility`
