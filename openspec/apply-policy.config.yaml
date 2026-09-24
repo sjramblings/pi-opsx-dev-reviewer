@@ -32,7 +32,9 @@
   #      the durable record the archive-time retro (/opsx-retro) ratchets into rules.
   #   4. Only if the reviewer returns VERDICT: PASS (no P0/P1) is the task done.
   #      The developer subagent marks its own task line [x] in tasks.md.
-  #   5. If BLOCK, hand the reviewer's findings back to the developer and repeat.
+  #   5. If BLOCK, hand the reviewer's findings back to the developer and repeat --
+  #      unless record-verdict reports parked (exit 3, the OPSX_MAX_BLOCK_ROUNDS cap,
+  #      default 3); then stop and report the task to the operator.
   # Work tasks sequentially; keep each delegation scoped to one task.
 
 

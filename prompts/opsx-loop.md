@@ -38,7 +38,11 @@ implement any task yourself—you orchestrate; the subagents do the work.
       this template before execution; never run this template form with either value unresolved. The
       orchestrator does this bookkeeping write before the developer ticks the task.
    d. On `VERDICT: PASS` (no P0/P1) the developer ticks the task `[x]`. On `BLOCK`,
-      hand the findings back to the developer and repeat from (a).
+      read the `record-verdict` output first. If it reports `parked` (exit status 3), the
+      task hit the BLOCK cap (`OPSX_MAX_BLOCK_ROUNDS`, default 3): stop the loop, do not
+      re-dispatch the developer, and report the task, its round count, and the latest
+      findings to the operator. Otherwise hand the findings back to the developer and repeat
+      from (a).
 4. Work tasks sequentially; one delegation per task; stop when all tasks are `[x]`.
 
 ## Dispatch: sequential by default, concurrent only when provably safe
