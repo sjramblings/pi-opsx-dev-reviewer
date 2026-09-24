@@ -3,7 +3,7 @@
 ## Why
 
 The architecture-writer produces a twelve-section arc42 markdown tree. Markdown is the right
-source of truth — it is diffable, gate-checkable, and derived from the code — but it is not
+source of truth—it is diffable, gate-checkable, and derived from the code—but it is not
 what an engineering engagement hands to a stakeholder. The `add-evolution-timeline` change
 proved that a self-contained, themed HTML page reads as a far more professional artifact from
 the same underlying data, with zero external dependencies and a light/dark editorial theme.
@@ -20,7 +20,7 @@ evolution timeline so the two read as one system.
 - The evolution timeline's theme tokens are extracted to a shared asset that both templates
   inline at build time, so a theme change updates both outputs.
 - Markdown stays the single source of truth and the `arch-lint` gate target. The HTML is a
-  derived render — never hand-authored, never a second source.
+  derived render—never hand-authored, never a second source.
 - The render is mandatory: the architecture-writer produces the HTML after the markdown, and
   `arch-lint` gains a freshness check that fails when `index.html` is not a current render of
   the markdown tree. A stale HTML cannot ship.

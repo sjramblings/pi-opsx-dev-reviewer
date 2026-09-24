@@ -6,7 +6,7 @@ scope: ["extensions/**/index.ts"]
 tags: [pi-loader, tokenizer, silent-failure]
 severity: high
 status: active
-summary: In pi extensions use new RegExp / string methods and no apostrophes or backticks — regex literals silently break the loader.
+summary: In pi extensions use new RegExp / string methods and no apostrophes or backticks—regex literals silently break the loader.
 source:
   change: harden-architect-scope
   commit: 824690b
@@ -25,18 +25,18 @@ apostrophe (even in a comment or a double-quoted string). Build patterns with
 ## Why
 
 pi 0.79.9 loads extensions through a fragile tokenizer that fails the whole file with
-"Unterminated string constant" and then **silently disables it** — the guard looks
+"Unterminated string constant" and then **silently disables it**—the guard looks
 installed but is not enforcing anything. `bun build`, jiti, and unit tests all pass while
 the real pi load path is dead. This silently disabled both `force-delegate` and
-`architect-scope` during the dogfood (see SHAKEDOWN.md); `just check-extensions` was added
+`architect-scope` during the dogfood (see shaKEDOWN.md); `just check-extensions` was added
 as the static guard for exactly this class.
 
 ## Refutation (the hard-to-vary core)
 
 - **conjectured:** an extension that passes `bun build`, jiti, and unit tests is loaded and active in pi.
-- **refuted_by:** pi silently disabled force-delegate and architect-scope during the dogfood while all three passed (SHAKEDOWN.md).
-- **learned:** pi's extension load path is not exercised by bun/jiti/tests — only loading through pi catches a tokenizer break.
-- **criterion_now:** `just check-extensions` greps for regex literals, raw backticks, and apostrophes.
+- **refuted_by:** pi silently disabled force-delegate and architect-scope during the dogfood while all three passed (shaKEDOWN.md).
+- **learned:** pi's extension load path is not exercised by bun/jiti/tests—only loading through pi catches a tokenizer break.
+- **criterion_now:** `just check-extensions` rejects regex literals, raw backticks, and apostrophes, and enforces even double-quote parity independently for every source and installed extension file.
 
 ## Example
 

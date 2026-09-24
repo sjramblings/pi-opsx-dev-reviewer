@@ -29,5 +29,11 @@
     "MD033": false   // inline HTML allowed (details/callout, index.html snippets)
   },
   "globs": ["**/*.md"],
-  "ignores": ["node_modules", ".git"]
+  "ignores": [
+    "node_modules",
+    ".git",
+    "styles/Google/**",
+    "styles/write-good/**",
+    "openspec/changes/**/review-log.md"
+  ]
 }

@@ -1,11 +1,11 @@
-# Review log — add-algorithm-grafts
+# Review log—add-algorithm-grafts
 
 Built directly in Claude Code (outside the pi delegation flow) at the operator's request.
-All four grafts are prompt/template/schema/doc changes — no new executable code.
+All four grafts are prompt/template/schema/doc changes—no new executable code.
 
 ---
 
-## Slice (tasks 1.1–5.1) — direct build, tool-verified
+## Slice (tasks 1.1–5.1)—direct build, tool-verified
 
 VERDICT: PASS
 FINDINGS: none. Deliberately excluded the Algorithm's ceremony (tier/thinking floors,

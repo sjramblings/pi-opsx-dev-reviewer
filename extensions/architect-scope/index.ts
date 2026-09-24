@@ -211,7 +211,8 @@ const BASH_REASON =
 
 const VERIFIER_BASH_REASON =
 	"architect-scope: a read-only verifier may run read-only shell plus the deterministic " +
-	"verification gates only (bun test, just verify-gate, just probe-check, tsc --noEmit). It " +
+	"verification gates only (bun test, just verify-gate, just probe-check, just docs-lint, " +
+	"tsc --noEmit). It " +
 	"holds no write tool and must never execute an arbitrary command.";
 
 // Read-only commands a scoped agent may run. sed and awk are excluded on purpose: sed -i and
@@ -223,8 +224,9 @@ const READONLY_CMDS = new Set([
 
 // Redirection and command substitution can hide a write; a chain operator separates commands.
 const BASH_DANGEROUS = new RegExp("[<>]|\\$\\(|\\x60");
+const BASH_LINE_BREAK = new RegExp("[\\r\\n]");
 const BASH_CHAIN = new RegExp("&&|\\|\\||;|\\||&");
-const BASH_WS = new RegExp("\\s+");
+const BASH_WS = new RegExp("[ \\t]+");
 
 // Commands a scoped agent legitimately needs that are not read-only: they write, but only to
 // the scope of that agent. Keyed by agent name; each entry maps a base command to the allowed
@@ -248,21 +250,23 @@ const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 		"reviewer",
 		new Map<string, Set<string>>([
 			["bun", new Set(["test"])],
-			["just", new Set(["verify-gate", "probe-check"])],
+			["just", new Set(["verify-gate", "probe-check", "docs-lint"])],
 			["tsc", new Set(["--noEmit"])],
 		]),
 	],
 	[
 		"spec-reviewer",
 		new Map<string, Set<string>>([
-			["just", new Set(["probe-check"])],
+			["just", new Set(["probe-check", "docs-lint"])],
 		]),
 	],
 ]);
 
 function scopedBashAllowed(agent: string, command: string): boolean {
 	if (typeof command !== "string" || command.trim() === "") return false;
-	if (BASH_DANGEROUS.test(command)) return false;
+	// Shell line breaks separate commands just like semicolons. Reject them before tokenizing
+	// so a read only prefix cannot admit a mutating command on the following line.
+	if (BASH_DANGEROUS.test(command) || BASH_LINE_BREAK.test(command)) return false;
 	const writers = SCOPED_BASH_WRITERS.get(agent);
 	for (const rawSegment of command.split(BASH_CHAIN)) {
 		const segment = rawSegment.trim();
@@ -274,6 +278,11 @@ function scopedBashAllowed(agent: string, command: string): boolean {
 		if (READONLY_CMDS.has(cmd)) continue;
 		const allowedArgs = writers ? writers.get(cmd) : undefined;
 		if (allowedArgs && tokens[1] !== undefined && allowedArgs.has(tokens[1])) {
+			// docs-lint is a guard-owned deterministic gate. Keep its invocation exact so
+			// arguments, options, and command chains cannot select a different execution path.
+			if (cmd === "just" && tokens[1] === "docs-lint" && command !== "just docs-lint") {
+				return false;
+			}
 			// The command is an allowed writer, but its output must not be redirected outside
 			// scope. Block any output-destination flag: bun tools/architecture-html.ts --out
 			// <path> writes wherever --out points, which would escape the path gate.

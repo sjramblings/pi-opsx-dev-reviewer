@@ -1,51 +1,67 @@
 # 8. Crosscutting Concepts
 
-Each pattern below names its catalogue, the repository location that instantiates it, and at
-least one consequence the system accepts by using it.
+Each pattern names its catalogue, repository instantiation, and accepted consequence.
 
-## Pattern: Fail-safe defaults (default-deny authorization)
+## Pattern: Fail-safe defaults
 
-Catalogue: Saltzer and Schroeder, *The Protection of Information in Computer Systems*
-(fail-safe defaults). Instantiated in the path gate, which restricts any unidentified agent
-rather than allowing it (`extensions/architect-scope/index.ts:38`) and in the bash gate,
-which blocks a command it cannot parse with confidence
-(`extensions/force-delegate/index.ts:13`).
-Consequence: the system accepts that legitimate-but-unrecognized actions are blocked — a
-symlinked repository root once blocked a valid write until the path resolution fix
-(`extensions/architect-scope/index.ts:128`), and an unparseable-but-harmless bash command is
-refused.
+**Catalogue:** Saltzer and Schroeder, *The Protection of Information in Computer Systems*
+(fail-safe defaults). The authorization gate restricts unidentified agents
+(`extensions/architect-scope/index.ts:38`), while session-cost rejects invalid and non-finite
+numeric candidates instead of coercing them (`tools/session-cost.ts:101`). The system accepts false
+rejections and partial results rather than unsafe authorization or inflated accounting.
 
-## Pattern: Least privilege via process isolation
+## Pattern: Pipes and filters
 
-Catalogue: Saltzer and Schroeder (least privilege). Instantiated by giving each agent only
-the tools its role needs — the review roles hold no write or bash tool
-(`agents/reviewer.md:6`, `agents/spec-reviewer.md:6`) — enforced by separate pi processes per
-subagent (`extensions/force-delegate/index.ts:15`).
-Consequence: the system accepts a per-delegation process-spawn cost, and a read-only
-reviewer cannot execute a test or build, so its verdict rests on inspection rather than
-running the code.
+**Catalogue:** *Pattern-Oriented Software Architecture*, Pipes and Filters. Session-cost separates
+classification/normalization, deterministic replay and aggregation, then text or HTML rendering
+(`tools/session-cost.ts:133`, `tools/session-cost.ts:248`, `tools/session-cost.ts:365`). The system
+accepts intermediate event storage proportional to the selected session file in exchange for
+source selection that is independent of rendering.
 
-## Pattern: Dead-man's-switch canary
+## Pattern: Authoritative-source precedence with fallback (cost: possible hybrid undercount)
 
-Catalogue: fail-fast health-check (release-engineering canary). Instantiated by
-harness-selftest, which halts the session when the force-delegate load handshake is absent
-(`extensions/harness-selftest/index.ts:28`).
-Consequence: the system accepts that startup depends on an environment handshake — a false
-negative in the handshake would halt an otherwise healthy session.
+**Catalogue:** *Enterprise Integration Patterns*, Message Filter and Content Enricher, adapted as a
+house source-selection rule. Native persisted child usage from processed parent tool results is
+selected session-wide when any child is aggregate-safe; otherwise independently collected legacy
+annotations are replayed (`tools/session-cost.ts:315`, `tools/session-cost.ts:325`,
+`tools/session-cost.ts:327`). The system accepts possible undercount of uncorrelated legacy-only
+spend in a hybrid file to prevent native and legacy double charging.
 
-## Pattern: Append-only ledger (ratchet)
+## Pattern: Explicit partial-result contract
 
-Catalogue: event sourcing / append-only log. Instantiated by the review-report artifact,
-where each verdict is appended before a task is ticked
-(`openspec/schemas/dev-reviewer/schema.yaml:68`), and by the shared tool-events audit trail.
-Consequence: the system accepts that a ledger can go stale relative to the code it records —
-an attested probe output drifted from the current tool behaviour and had to be flagged for
-re-attestation.
+**Catalogue:** house convention, aligned with Result-with-diagnostics APIs. One closed, ordered
+reason list drives both renderers and coverage is incomplete whenever that list is non-empty
+(`tools/session-cost.ts:63`, `tools/session-cost.ts:343`, `tools/session-cost.ts:359`). The system
+accepts a more complex public output contract so malformed or ambiguous persisted cost cannot hide
+behind a complete label.
 
-## Pattern: Three-state graceful-skip gate
+## Pattern: Output-boundary encoding (cost: future encoding discipline)
 
-Catalogue: house convention (no external catalogue). Instantiated by the lint gates, which
-report `FAIL`, `PARTIAL`, or `clean`, and report `clean` only when every tool ran
-(`justfile.opsx:7`, `justfile.opsx:44`).
-Consequence: the accepted trade-off is that a machine which omits the gate tools reports
-`PARTIAL` rather than `clean`, so a local run yields a weaker signal than CI.
+**Catalogue:** OWASP Cross Site Scripting Prevention Cheat Sheet, output encoding. Session name,
+model keys, coverage, and reason text pass through one HTML escaping helper at interpolation
+(`tools/session-cost.ts:391`, `tools/session-cost.ts:404`, `tools/session-cost.ts:417`). The system
+accepts a maintenance obligation on every future dynamic insertion to avoid adding a templating
+or DOM dependency.
+
+## Optional Structurizr crosscutting concepts
+
+**One ordered failure taxonomy.** Twenty-three primary codes are ranked once, and the command stops
+at the first failure in that order, so the reported code never depends on discovery order
+(`tools/structurizr-render.ts:41`). The accepted cost is that a later, more interesting fault stays
+hidden until the earlier one is fixed.
+
+**Accept or reject, never rewrite.** SVG verification parses with a vendored, hash-pinned,
+namespace-aware parser with document type declarations rejected, and refuses anything active or externally referencing; it
+never sanitizes (`tools/structurizr-verify.ts:530`). The accepted cost is that a benign-but-unusual
+renderer construct fails the gate until the policy is widened deliberately.
+
+**Ownership is a live descriptor plus a nonce.** A matching directory name, a well-formed marker, or
+a process ID never authorizes deletion, so an abandoned stage is retained for explicit operator
+recovery rather than collected automatically (`tools/structurizr-fs.ts:352`). The accepted cost is
+that a crashed run needs a documented manual cleanup.
+
+**Provenance without volatility.** The manifest records the exact source hash, image reference,
+native platform, application and library versions, Bun version, and every published file's size and
+hash, and deliberately excludes timestamps, host names, process IDs, and staging nonces
+(`tools/structurizr-verify.ts:660`). The accepted cost is that the manifest cannot answer when a
+render happened.

@@ -1,4 +1,4 @@
-# project-onboarding — spec
+# project-Onboarding—spec
 
 ## ADDED Requirements
 
@@ -14,7 +14,7 @@ piece into the target repo without clobbering existing data files.
 
 #### Scenario: Existing data files are never clobbered
 
-- **WHEN** the target repo already has an `AGENTS.md`, a `learnings/` entry, or a `justfile`
+- **WHEN** the target repo already has an `AGENTS.md`, a `learnings/` entry, or a justfile
 - **THEN** the installer keeps them (uses `cp -n`, appends the import rather than overwriting) and reports what it kept
 
 ### Requirement: The load-breaker guard scans the installed extension layout

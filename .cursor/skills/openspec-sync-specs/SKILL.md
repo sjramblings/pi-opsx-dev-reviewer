@@ -1,6 +1,6 @@
 ---
 name: openspec-sync-specs
-description: Sync delta specs from a change to main specs. Use when the user wants to update main specs with changes from a delta spec, without archiving the change.
+description: Intelligently sync one capability after the sanctioned archive path is refused by the promotion guard.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -9,46 +9,57 @@ metadata:
   generatedBy: "1.4.1"
 ---
 
+# openspec-sync-specs
+
 Sync delta specs from a change to main specs.
 
-This is an **agent-driven** operation - you will read delta specs and directly edit main specs to apply the changes. This allows intelligent merging (e.g., adding a scenario without copying the entire requirement).
+The default sanctioned path is `just archive-change <change>`. Invoke this prose skill only when that
+command's promotion guard refuses with `UNSAFE_PARTIAL_MODIFIED`, and scope the fallback to the exact
+capability named by the guard. This is not a general or pre-emptive sync path.
 
-**Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+This is an **agent-driven** operation - you will read delta specs and directly edit main specs to apply the changes. This allows intelligent merging (for example, adding a scenario without copying the entire requirement).
 
-**Steps**
+**Input**: Require the change name, the `UNSAFE_PARTIAL_MODIFIED` refusal, and the capability named by
+the guard. If any are absent or ambiguous, stop and direct the operator to
+`just archive-change <change>`; never infer the capability or broaden the scope.
 
-1. **If no change name provided, prompt for selection**
+## Steps
 
-   Run `openspec list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
+1. **Confirm the promotion-guard refusal**
 
-   Show changes that have delta specs (under `specs/` directory).
+   Confirm that `just archive-change <change>` failed with `UNSAFE_PARTIAL_MODIFIED` and record the
+   exact capability named by the guard. If the command did not reach that refusal, stop and report
+   the original failure instead of invoking this skill.
 
-   **IMPORTANT**: Do NOT guess or auto-select a change. Always let the user choose.
+   Handle only the named capability. Do not select, inspect, or sync sibling capabilities.
 
 2. **Resolve change context**
 
    Run:
+
    ```bash
    openspec status --change "<name>" --json
    ```
 
    If status reports `actionContext.mode: "workspace-planning"`, explain that workspace spec sync is not supported in this slice and STOP. Do not fall back to repo-local paths or edit linked repos.
 
-3. **Find delta specs**
+3. **Find the guard-named delta spec**
 
-   Use `artifactPaths.specs.existingOutputPaths` from the status JSON as the list of delta spec files.
+   Use `artifactPaths.specs.existingOutputPaths` from the status JSON to locate only the delta spec
+   for the exact capability named by the guard. Validate that exactly one matching path exists; if it
+   is absent or ambiguous, fail with context and make no edits.
 
-   Each delta spec file contains sections like:
+   The delta spec contains sections like:
    - `## ADDED Requirements` - New requirements to add
    - `## MODIFIED Requirements` - Changes to existing requirements
    - `## REMOVED Requirements` - Requirements to remove
    - `## RENAMED Requirements` - Requirements to rename (FROM:/TO: format)
 
-   If no delta specs found, inform user and stop.
+   If the named delta spec is not found, inform the user and stop.
 
-4. **For each delta spec, apply changes to main specs**
+4. **Apply the named delta spec to its main spec**
 
-   For each repo-local capability delta spec path returned by the CLI:
+   For the one guard-named, repo-local capability delta spec path returned by the CLI:
 
    a. **Read the delta spec** to understand the intended changes
 
@@ -72,20 +83,34 @@ This is an **agent-driven** operation - you will read delta specs and directly e
       - Remove the entire requirement block from main spec
 
       **RENAMED Requirements:**
-      - Find the FROM requirement, rename to TO
+      - Find the FROM requirement, rename it to the target name
 
    d. **Create new main spec** if capability doesn't exist yet:
       - Create `openspec/specs/<capability>/spec.md`
       - Add Purpose section (can be brief, mark as TBD)
       - Add Requirements section with the ADDED requirements
 
+   e. **Make the named delta safe for deterministic promotion** after the intelligent merge:
+      - For every MODIFIED requirement in the named delta, replace that partial delta block with the
+        complete requirement now present in the resulting main spec, including its descriptive body
+        and every scenario
+      - Preserve all other delta sections for the named capability exactly
+      - If the complete restatement cannot be verified against the resulting main requirement, stop
+        with context instead of reporting success
+
+      This final restatement records the intelligently merged result without changing its meaning. It
+      allows the promotion guard to verify the named capability when the archive skill retries the
+      sanctioned path; it does not permit inspecting or changing sibling deltas.
+
 5. **Show summary**
 
-   After applying all changes, summarize:
-   - Which capabilities were updated
+   After applying the scoped change, summarize:
+   - The guard-named capability that was updated
    - What changes were made (requirements added/modified/removed/renamed)
+   - That each MODIFIED requirement in the named delta is now a complete, verified restatement
+   - That no sibling capability was inspected or modified
 
-**Delta Spec Format Reference**
+## Delta Spec Format Reference
 
 ```markdown
 ## ADDED Requirements
@@ -112,36 +137,34 @@ The system SHALL do something new.
 
 - FROM: `### Requirement: Old Name`
 - TO: `### Requirement: New Name`
-```
-
-**Key Principle: Intelligent Merging**
-
+```text
+## Key Principle: Intelligent Merging
 Unlike programmatic merging, you can apply **partial updates**:
+
 - To add a scenario, just include that scenario under MODIFIED - don't copy existing scenarios
 - The delta represents *intent*, not a wholesale replacement
 - Use your judgment to merge changes sensibly
 
-**Output On Success**
-
-```
+## Output On Success
+```text
 ## Specs Synced: <change-name>
 
-Updated main specs:
+Updated main spec for guard-named capability **<capability>**:
 
-**<capability-1>**:
 - Added requirement: "New Feature"
 - Modified requirement: "Existing Feature" (added 1 scenario)
 
-**<capability-2>**:
-- Created new spec file
-- Added requirement: "Another Feature"
+The named capability is updated, its MODIFIED delta is guard-safe, and sibling capabilities are
+untouched. The fallback archive flow may now retry `just archive-change <change>`.
+```text
+## Guardrails
 
-Main specs are now updated. The change remains active - archive when implementation is complete.
-```
-
-**Guardrails**
-- Read both delta and main specs before making changes
-- Preserve existing content not mentioned in delta
+- Use `just archive-change <change>` as the default sanctioned path
+- Enter this prose fallback only after `UNSAFE_PARTIAL_MODIFIED` names the capability
+- Read only the named capability's delta and main specs before making changes
+- Never inspect or modify a sibling capability through this fallback
+- Preserve existing content not mentioned in the delta
+- Fully restate the resulting MODIFIED requirements in the named delta before reporting success
 - If something is unclear, ask for clarification
-- Show what you're changing as you go
-- The operation should be idempotent - running twice should give same result
+- Show what you are changing as you go
+- The operation should be idempotent; running twice should give the same result

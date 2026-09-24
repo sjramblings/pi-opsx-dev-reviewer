@@ -1,4 +1,4 @@
-# Tasks — add-algorithm-grafts
+# Tasks—add-algorithm-grafts
 
 > Built + verified directly this session; evidence in review-log.md. All four are
 > prompt/template/schema/doc changes (no new executable code).

@@ -2,36 +2,48 @@
 
 ## Business context
 
-The kit sits between an operator and the pi coding agent. The operator drives a change; the
-kit constrains how pi executes it, so that a single read-only main agent orchestrates
-specialist subagents under structural guards.
+An operator drives pi and `openspec` through this repository's guards, role definitions, recipes, and
+local deterministic tools. For cost reporting, the operator supplies an existing parent-session
+`JSONL` file; session-cost reads it and emits text or an HTML fragment to standard output
+(`tools/session-cost.ts:459`, `tools/session-cost.ts:462`).
 
 ## External actors and systems
 
-| External entity | Relationship | Interface |
+| External entity | Relationship and interface | Ownership boundary |
 | --- | --- | --- |
-| **pi coding agent** | Host runtime the kit extends | Extensions loaded from `.pi/extensions/`, agents from `~/.pi/agent/agents/`, prompts from the prompts directory (`install.sh:35`, `install.sh:44`). |
-| **`@mjakl/pi-subagent`** | Community extension that adds the `subagent` tool and sets identity | Installed by `install.sh:33`; provides `PI_SUBAGENT_STACK` / `PI_SUBAGENT_DEPTH`. |
-| **OpenSpec 1.4.1** | Change-management CLI | The `dev-reviewer` schema and `just` recipes wrap it (`justfile.opsx:63`). |
-| **aws-well-architected-review skill** | Third-party corpus + Python lookup helper | Invoked read-only as a subprocess by `tools/waf-grounding.ts` for architecture-writer grounding. |
-| **Model providers** | Back the agents | Each agent pins a `model:` (`agents/developer.md:4`, `agents/reviewer.md:4`); cross-family by design (see section 9). |
+| Operator | Selects a session file and invokes `just session-cost <session> [--html]`. | Owns file selection and interpretation of incomplete coverage (`justfile.opsx:469`). |
+| pi coding agent | Hosts extension execution and persists assistant messages in session `JSONL`. | Runtime and persistence format are outside this repository. |
+| `@mjakl/pi-subagent` | Provides the `subagent` tool and persists aggregate child results in the parent tool-result details consumed by the rollup. | Third-party producer; this repository validates but does not modify its output (`install.sh:33`, `tools/session-cost.ts:286`). |
+| `openspec` | Supplies change artifacts consumed by the delegated workflow. | External methodology with a repository-owned schema (`openspec/schemas/dev-reviewer/schema.yaml:1`). |
+| Model providers | Execute main and child model calls whose already-calculated costs appear in persisted usage. | Pricing and usage production remain provider/runtime concerns; session-cost does not derive cost from tokens (`tools/session-cost.ts:147`). |
 
-## Scope
+## Scope and coverage boundary
 
-In scope: the delegation guards, the agent role definitions, the OpenSpec `dev-reviewer`
-schema and its gates, the learning/trust/goal ledgers, and the deterministic engines under
-`tools/`.
+In scope are all eligible cost-bearing entries in the selected `JSONL` file: validated assistant
+usage and validated aggregate child usage in processed, deduplicated parent `subagent` tool
+results (`tools/session-cost.ts:269`, `tools/session-cost.ts:281`, `tools/session-cost.ts:286`). The
+rollup does not filter to a currently visible branch; it processes the file in line order
+(`tools/session-cost.ts:269`).
 
-Out of scope: the pi runtime itself, the model providers, and the third-party corpus — the
-kit consumes these but does not own them.
-
-## System context
+Out of scope are child-session retention, a new persistence hook, changes to the third-party
+subagent extension, historical backfill, and modification of pi's built-in export. The shipped
+command only reads the selected file and writes its rendering to standard output
+(`tools/session-cost.ts:459`, `tools/session-cost.ts:462`).
 
 ```mermaid
 flowchart LR
-  op[Operator] --> pi[pi coding agent]
-  pi --> kit[pi-opsx-dev-reviewer harness]
-  kit --> subagents[Delegated subagents]
-  kit --> openspec[OpenSpec change log]
-  kit -.reads.-> corpus[Well-Architected corpus]
+  operator[Operator] --> rollup[Session cost component]
+  pi[pi coding agent] --> session[Parent session JSONL]
+  subagent[Third party subagent tool] --> session
+  session --> rollup
+  rollup --> operator
+  rollup -.-> boundary[No writer or child session read]
 ```
+
+## Optional Structurizr external interfaces
+
+When the option is installed the system gains two external relationships and no new inbound one.
+The Docker registry supplies the pinned image by digest, and the local Docker engine executes it in
+a fresh container with no network (`tools/structurizr-docker.ts:96`). The team owns the model file;
+the kit never authors it (`install.sh:218`). The accepted cost is that the render boundary depends
+on an external registry being reachable the first time an engine pulls the image.

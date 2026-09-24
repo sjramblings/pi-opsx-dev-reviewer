@@ -94,7 +94,10 @@ export default function (pi: any) {
 		if (!v) return undefined;
 		const msg =
 			"branch-guard: blocked " + v + ". This harness enforces PR flow -- create a " +
-			"feature branch and open a pull request; never change main/master directly.";
+			"feature branch and open a pull request; never change main/master directly. " +
+			"For context-sensitive commit checks, use a separate invocation from the intended " +
+			"repository working directory after confirming the explicit branch context. Do not " +
+			"blindly allow or retry the commit.";
 		logBlocked("branch-guard", "bash", msg, event.input?.command);
 		return { block: true, reason: msg };
 	});

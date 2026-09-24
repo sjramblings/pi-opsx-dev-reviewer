@@ -1,4 +1,4 @@
-# Tasks — add-trust-and-goals
+# Tasks—add-trust-and-goals
 
 > Built + verified directly this session (outside the pi delegation flow); evidence in
 > review-log.md. Scope: the deterministic, no-billing subset of the assessed doctrine.
@@ -18,11 +18,11 @@
       store with `_TEMPLATE.md`, `README.md`, and one seeded real goal.
       probe: `bun test tools/verify-goals.test.ts` passes; `just goals` runs the seeded predicate and exits 0.
 - [x] 2.2 `just goals` re-verifies all goals.
-      probe: `just goals` prints "all N standing goal(s) hold" and writes memory/goal-ledger.tsv.
+      probe: `just goals` prints "all N standing goals hold" and writes memory/goal-ledger.tsv.
 
 ## 3. Compost prompt
 
-- [x] 3.1 `prompts/opsx-compost.md` — weekly cross-change, at most three proposals, propose-only.
+- [x] 3.1 `prompts/opsx-compost.md`—weekly cross-change, at most three proposals, propose-only.
       probe: `grep -q 'at most' prompts/opsx-compost.md` and it is installed by install.sh.
 
 ## 4. Wiring + docs
@@ -38,8 +38,8 @@
 - [x] 5.1 All tool tests pass and no pi load-breakers introduced.
       probe: `bun test tools/` all pass; `just check-extensions` exits 0.
 
-## 6. Deferred — the autonomy frontier (NOT in scope)
+## 6. Deferred—the autonomy frontier (NOT in scope)
 
-- [ ] 6.1 Cron heartbeat + cheap-triage economics + unattended shipping driven by the trust
+- [ ] 6.1 cron heartbeat + cheap-triage economics + unattended shipping driven by the trust
       ledger. Requires an API-key-not-OAuth billing guardrail first (subscription-billing risk).
       probe: a billing guardrail is in place AND a cron run bills to API key, before any autonomous ship.

@@ -10,6 +10,8 @@ type Handler = (event: Event) => Promise<Decision>;
 type InputFactory = (cwd: string) => unknown;
 
 const originalStack = process.env.PI_SUBAGENT_STACK;
+const originalToolEventMode = process.env.PI_TOOL_EVENT_MODE;
+const originalToolEventTestPath = process.env.PI_TOOL_EVENT_TEST_PATH;
 const originalCwd = process.cwd();
 
 afterEach(() => {
@@ -17,6 +19,16 @@ afterEach(() => {
 		delete process.env.PI_SUBAGENT_STACK;
 	} else {
 		process.env.PI_SUBAGENT_STACK = originalStack;
+	}
+	if (originalToolEventMode === undefined) {
+		delete process.env.PI_TOOL_EVENT_MODE;
+	} else {
+		process.env.PI_TOOL_EVENT_MODE = originalToolEventMode;
+	}
+	if (originalToolEventTestPath === undefined) {
+		delete process.env.PI_TOOL_EVENT_TEST_PATH;
+	} else {
+		process.env.PI_TOOL_EVENT_TEST_PATH = originalToolEventTestPath;
 	}
 	process.chdir(originalCwd);
 });
@@ -43,6 +55,8 @@ async function decisionForInput(
 
 	const tempDir = mkdtempSync(join(tmpdir(), "architect-scope-test-"));
 	try {
+		process.env.PI_TOOL_EVENT_MODE = "synthetic-test";
+		process.env.PI_TOOL_EVENT_TEST_PATH = join(tempDir, "tool-events.jsonl");
 		process.chdir(tempDir);
 		const eventInput = typeof input === "function" ? input(tempDir) : input;
 		return await handler({ toolName: toolName, input: eventInput });
@@ -175,8 +189,17 @@ async function bashDecision(agent, command) {
 	if (agent === undefined) delete process.env.PI_SUBAGENT_STACK;
 	else process.env.PI_SUBAGENT_STACK = JSON.stringify([agent]);
 	let handler;
-	architectScope({ on(name, registered) { if (name === "tool_call") handler = registered; } });
-	return handler({ toolName: "bash", input: { command } });
+	const tempDir = mkdtempSync(join(tmpdir(), "architect-scope-events-"));
+	try {
+		process.env.PI_TOOL_EVENT_MODE = "synthetic-test";
+		process.env.PI_TOOL_EVENT_TEST_PATH = join(tempDir, "tool-events.jsonl");
+		process.chdir(tempDir);
+		architectScope({ on(name, registered) { if (name === "tool_call") handler = registered; } });
+		return await handler({ toolName: "bash", input: { command } });
+	} finally {
+		process.chdir(originalCwd);
+		rmSync(tempDir, { recursive: true, force: true });
+	}
 }
 
 test("architecture-writer bash: read-only allowed", async () => {
@@ -231,6 +254,12 @@ test("architecture-writer bash: render without --out still allowed", async () =>
 test("reviewer bash: git diff allowed", async () => {
 	await expect(bashDecision("reviewer", "git diff HEAD")).resolves.toBeUndefined();
 });
+test("reviewer bash: read-only prefix followed by LF mutation blocked", async () => {
+	await expect(bashDecision("reviewer", "git status\nrm -rf src")).resolves.toMatchObject({ block: true });
+});
+test("reviewer bash: read-only prefix followed by CRLF mutation blocked", async () => {
+	await expect(bashDecision("reviewer", "git status\r\nrm -rf src")).resolves.toMatchObject({ block: true });
+});
 test("reviewer bash: bun test allowed", async () => {
 	await expect(bashDecision("reviewer", "bun test tools/record-verdict.test.ts")).resolves.toBeUndefined();
 });
@@ -239,6 +268,24 @@ test("reviewer bash: just verify-gate allowed", async () => {
 });
 test("reviewer bash: just probe-check allowed", async () => {
 	await expect(bashDecision("reviewer", "just probe-check add-foo")).resolves.toBeUndefined();
+});
+test("reviewer bash: exact just docs-lint allowed", async () => {
+	await expect(bashDecision("reviewer", "just docs-lint")).resolves.toBeUndefined();
+});
+test("reviewer bash: docs-lint arguments and options blocked", async () => {
+	await expect(bashDecision("reviewer", "just docs-lint README.md")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("reviewer", "just docs-lint --unstable")).resolves.toMatchObject({ block: true });
+});
+test("reviewer bash: only byte-exact docs-lint spelling is admitted", async () => {
+	await expect(bashDecision("reviewer", " just docs-lint")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("reviewer", "just  docs-lint")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("reviewer", "just docs-lint ")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("reviewer", "just docs-lint # ignored shell suffix")).resolves.toMatchObject({ block: true });
+});
+test("reviewer bash: docs-lint chains, redirection, and env wrappers blocked", async () => {
+	await expect(bashDecision("reviewer", "just docs-lint && git status")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("reviewer", "just docs-lint > /tmp/out")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("reviewer", "MODE=test just docs-lint")).resolves.toMatchObject({ block: true });
 });
 test("reviewer bash: tsc --noEmit allowed", async () => {
 	await expect(bashDecision("reviewer", "tsc --noEmit")).resolves.toBeUndefined();
@@ -292,8 +339,20 @@ test("reviewer write resolution is unchanged by the bash grant", async () => {
 	const d = await decisionFor("reviewer", "src/app.ts");
 	expect(d?.block).toBe(true);
 });
-test("spec-reviewer bash: probe-check allowed, arbitrary blocked", async () => {
+test("spec-reviewer bash: probe-check and exact docs-lint allowed, arbitrary blocked", async () => {
 	await expect(bashDecision("spec-reviewer", "just probe-check add-foo")).resolves.toBeUndefined();
+	await expect(bashDecision("spec-reviewer", "just docs-lint")).resolves.toBeUndefined();
 	const d = await bashDecision("spec-reviewer", "bun test");
 	expect(d?.block).toBe(true);
+});
+test("spec-reviewer bash: read-only prefix followed by line-break mutation blocked", async () => {
+	await expect(bashDecision("spec-reviewer", "git status\nrm -rf src")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("spec-reviewer", "git status\rrm -rf src")).resolves.toMatchObject({ block: true });
+});
+test("spec-reviewer bash: docs-lint mutation surfaces remain blocked", async () => {
+	await expect(bashDecision("spec-reviewer", "just docs-lint --fix")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("spec-reviewer", "just docs-lint; rm -r -- src")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("spec-reviewer", "just docs-lint\nrm -rf src")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("spec-reviewer", "just\tdocs-lint")).resolves.toMatchObject({ block: true });
+	await expect(bashDecision("spec-reviewer", "just docs-lint ")).resolves.toMatchObject({ block: true });
 });

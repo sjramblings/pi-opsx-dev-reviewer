@@ -1,4 +1,4 @@
-# agent-path-scoping — delta
+# agent-path-scoping—delta
 
 ## ADDED Requirements
 

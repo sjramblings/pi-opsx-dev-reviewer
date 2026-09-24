@@ -1,43 +1,110 @@
 /*
- * harness-selftest -- a session-start canary that turns a SILENT enforcer-load failure
- * into a LOUD halt.
+ * harness-selftest -- project-local fail-closed guard for marker-bearing sessions.
  *
- * The dogfood (see SHAKEDOWN.md) found that force-delegate can fail to load in pi and be
- * silently disabled, leaving the main agent able to write freely while everyone believes
- * delegation is enforced. This canary detects that at session start and refuses to be
- * quiet about it.
+ * A valid delegated child is exempt before handshake evaluation. Every marker-bearing
+ * top-level process must carry the current PID handshake from force-delegate.
  *
- * Mechanism: force-delegate sets process.env.__FORCE_DELEGATE_LOADED = "1" when it loads
- * and activates for the main agent. Both run in the same main pi process, so this canary
- * reads that flag on session_start. If the flag is absent, force-delegate did not load --
- * so it prints a loud banner and asks the agent to stop. Subagents (depth > 0) skip the
- * check, since force-delegate no-ops there by design.
- *
- * pi-loader note: no regex literals, no raw backticks, no apostrophes (see SHAKEDOWN.md
- * and "just check-extensions"). Keep it that way.
- *
- * Install (per OpenSpec project): copy this folder to  <repo>/.pi/extensions/
+ * Loader safety: no regex literals, raw backticks, or apostrophes anywhere in this file.
  */
 
-const HALT_BANNER =
-	"HARNESS UNGUARDED -- force-delegate did not load, so the main agent is NOT read-only " +
-	"and can write and run mutating commands directly. Delegation is not being enforced. " +
-	"Stop now: run (just check-extensions), fix the extension, and restart. See SHAKEDOWN.md.";
+import { existsSync } from "fs";
+import { join } from "path";
 
-export default function (pi: any) {
-	pi.on("session_start", async (_event: any, ctx: any) => {
-		// Subagents legitimately have no force-delegate; only the main agent is guarded.
-		if (Number(process.env.PI_SUBAGENT_DEPTH ?? "0") > 0) return;
+type ExtensionContext = {
+	ui?: { notify?: (message: string, level?: "error") => void };
+	shutdown?: () => void;
+};
 
-		if (process.env.__FORCE_DELEGATE_LOADED === "1") return; // guard active -- quiet OK
+type ExtensionHandler = (event: unknown, context: ExtensionContext) => unknown;
 
-		process.stderr.write("\n########## " + HALT_BANNER + " ##########\n\n");
-		if (ctx && ctx.ui && typeof ctx.ui.notify === "function") {
+type UserBashResult = {
+	result: {
+		output: string;
+		exitCode: undefined;
+		cancelled: true;
+		truncated: false;
+	};
+};
+
+type ExtensionApi = {
+	on: (name: string, handler: ExtensionHandler) => void;
+};
+
+const HALT_REASON =
+	"HARNESS UNGUARDED -- force-delegate did not load in this top-level process. " +
+	"Stop now. In the primary checkout run just check-extensions and repair the guard. " +
+	"For a linked checkout, return to the primary, remove the unsafe worktree if needed, " +
+	"then recreate it safely with just worktree <name> before restarting pi.";
+
+function isDelegatedChild(rawDepth: string | undefined): boolean {
+	if (rawDepth === undefined) return false;
+	const depth = rawDepth.trim();
+	if (depth.length === 0) return false;
+	for (let index = 0; index < depth.length; index++) {
+		const code = depth.charCodeAt(index);
+		if (code < 48 || code > 57) return false;
+	}
+	const parsed = Number(depth);
+	return Number.isSafeInteger(parsed) && parsed > 0;
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function reportSideChannelFailure(channel: string, error: unknown): void {
+	process.stderr.write(
+		"harness-selftest: " + channel + " failed after HALT: " + errorMessage(error) + "\n",
+	);
+}
+
+export default function (pi: ExtensionApi): void {
+	let halted = false;
+
+	pi.on("session_start", (_event: unknown, context: ExtensionContext): void => {
+		halted = false;
+		if (!existsSync(join(process.cwd(), ".harness-marker"))) return;
+		if (isDelegatedChild(process.env.PI_SUBAGENT_DEPTH)) return;
+		if (process.env.__FORCE_DELEGATE_LOADED === String(process.pid)) return;
+
+		halted = true;
+		process.stderr.write("\n########## " + HALT_REASON + " ##########\n\n");
+		if (context.ui && typeof context.ui.notify === "function") {
 			try {
-				ctx.ui.notify(HALT_BANNER);
-			} catch {
-				// notify is best-effort; the stderr banner is the reliable signal.
+				context.ui.notify(HALT_REASON, "error");
+			} catch (error) {
+				reportSideChannelFailure("notification", error);
 			}
 		}
+		if (typeof context.shutdown === "function") {
+			try {
+				context.shutdown();
+			} catch (error) {
+				reportSideChannelFailure("shutdown", error);
+			}
+		}
+		process.exit(1);
+	});
+
+	pi.on("input", (): { action: "handled" } | undefined => {
+		if (!halted) return undefined;
+		return { action: "handled" };
+	});
+
+	pi.on("tool_call", (): { block: true; reason: string } | undefined => {
+		if (!halted) return undefined;
+		return { block: true, reason: HALT_REASON };
+	});
+
+	pi.on("user_bash", (): UserBashResult | undefined => {
+		if (!halted) return undefined;
+		return {
+			result: {
+				output: HALT_REASON,
+				exitCode: undefined,
+				cancelled: true,
+				truncated: false,
+			},
+		};
 	});
 }

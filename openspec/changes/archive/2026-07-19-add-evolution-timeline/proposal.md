@@ -1,9 +1,9 @@
-# Generate an architecture-evolution timeline from OpenSpec
+# Generate an architecture-evolution timeline from `openspec`
 
 ## Why
 
-`openspec/changes/` is already an append-only log of architectural intent — each change
-names capabilities, declares requirements, records task and archive state — but nothing
+`openspec/changes/` is already an append-only log of architectural intent—each change
+names capabilities, declares requirements, records task and archive state—but nothing
 reads that log back as a picture of how the architecture grew. The history exists; the
 view does not. An operator, reviewer, or stakeholder who wants "how did this system get
 here" today reads ten folders by hand.
@@ -20,7 +20,7 @@ here" today reads ten folders by hand.
   backlog → in flight), never invented.
 - A new `evolution-narrator` subagent optionally sharpens that thesis: it reads the
   extracted model and writes a `thesis.json` the tool renders instead of the computed
-  default. The narrator is the ONLY model in the loop and is never required — without it
+  default. The narrator is the ONLY model in the loop and is never required—without it
   the page is complete.
 - A `just evolution-timeline` recipe wires it, portable to every repo that installs the
   kit.
@@ -29,7 +29,7 @@ here" today reads ten folders by hand.
 
 ### New Capabilities
 
-- `evolution-timeline`: extract an architecture-evolution model from an OpenSpec repo and
+- `evolution-timeline`: extract an architecture-evolution model from an `openspec` repo and
   render it as a self-contained interactive HTML page, with an optional model-authored
   thesis that never gates the deterministic output.
 

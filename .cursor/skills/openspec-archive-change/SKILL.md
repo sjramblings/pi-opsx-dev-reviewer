@@ -1,6 +1,6 @@
 ---
 name: openspec-archive-change
-description: Archive a completed change in the experimental workflow. Use when the user wants to finalize and archive a change after implementation is complete.
+description: Fallback archive workflow for a completed change when the sanctioned path is refused by the promotion guard.
 license: MIT
 compatibility: Requires openspec CLI.
 metadata:
@@ -9,20 +9,28 @@ metadata:
   generatedBy: "1.4.1"
 ---
 
+# openspec-archive-change
+
 Archive a completed change in the experimental workflow.
 
-**Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+The default sanctioned path is `just archive-change <change>`. Invoke this prose skill only when that
+command's promotion guard refuses with `UNSAFE_PARTIAL_MODIFIED` and names a capability. The fallback
+is limited to the named capability; it is not an alternative general archive path.
 
-**Steps**
+**Input**: Require the change name, the `UNSAFE_PARTIAL_MODIFIED` refusal, and the capability named by
+the guard. If any are absent or ambiguous, stop and direct the operator to
+`just archive-change <change>`; do not infer a fallback trigger or capability.
 
-1. **If no change name provided, prompt for selection**
+## Steps
 
-   Run `openspec list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
+1. **Confirm the promotion-guard refusal**
 
-   Show only active changes (not already archived).
-   Include the schema used for each change if available.
+   Confirm that `just archive-change <change>` failed with `UNSAFE_PARTIAL_MODIFIED` and record the
+   exact capability named by the guard.
 
-   **IMPORTANT**: Do NOT guess or auto-select a change. Always let the user choose.
+   If the command did not reach that refusal, stop. Report the original failure instead of bypassing
+   it. Handle only the named capability, and never broaden the prose fallback to sibling
+   capabilities.
 
 2. **Check artifact completion status**
 
@@ -53,65 +61,68 @@ Archive a completed change in the experimental workflow.
 
    **If no tasks file exists:** Proceed without task-related warning.
 
-4. **Assess delta spec sync state**
+4. **Intelligently sync only the refused capability**
 
-   Use `artifactPaths.specs.existingOutputPaths` from status JSON to check for delta specs. If none exist, proceed without sync prompt.
+   Use `artifactPaths.specs.existingOutputPaths` from status JSON to locate the delta spec for the
+   exact capability named by the guard. If that delta does not exist, fail with context; do not
+   inspect or substitute another capability.
 
-   **If delta specs exist:**
-   - Compare each delta spec with its corresponding main spec at `openspec/specs/<capability>/spec.md`
-   - Determine what changes would be applied (adds, modifications, removals, renames)
-   - Show a combined summary before prompting
+   Compare only that delta with its main spec at `openspec/specs/<capability>/spec.md`, determine the
+   required intelligent merge, and show the capability-scoped summary before prompting to continue
+   or cancel.
 
-   **Prompt options:**
-   - If changes needed: "Sync now (recommended)", "Archive without syncing"
-   - If already synced: "Archive now", "Sync anyway", "Cancel"
+   If the user continues, use Task tool (subagent_type: "general-purpose," prompt: "Use Skill tool to
+   invoke openspec-sync-specs for change '<name>' after promotion-guard refusal
+   'UNSAFE_PARTIAL_MODIFIED', scoped only to capability '<capability>'. Intelligently merge the named
+   delta into its main spec, then make each merged MODIFIED requirement in that named delta a complete
+   restatement of the resulting main requirement so deterministic promotion is guard-safe. Delta spec
+   analysis: <include the capability-scoped analysis>"). If sync fails, is cancelled, or cannot make
+   the named delta guard-safe, stop without archiving.
 
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+5. **Retry the sanctioned archive path**
 
-5. **Perform the archive**
-
-   Create an `archive` directory under `planningHome.changesDir` if it doesn't exist:
-   ```bash
-   mkdir -p "<planningHome.changesDir>/archive"
-   ```
-
-   Generate target name using current date: `YYYY-MM-DD-<change-name>`
-
-   **Check if target already exists:**
-   - If yes: Fail with error, suggest renaming existing archive or using different date
-   - If no: Move `changeRoot` to the archive directory
+   After the capability-scoped intelligent merge makes the named delta guard-safe, run exactly:
 
    ```bash
-   mv "<changeRoot>" "<planningHome.changesDir>/archive/YYYY-MM-DD-<name>"
+   just archive-change "<name>"
    ```
 
-6. **Display summary**
+   This retries the complete deterministic sequence: archive check, promotion guard across every
+   capability (including siblings), openspec CLI promotion and archival, and promoted-spec lint
+   normalisation. Do not reproduce or skip any stage.
 
-   Show archive completion summary including:
+   If the retry exits non-zero, stop and report the exact failing stage and command output. Do not
+   perform a direct filesystem archive or claim a successful result. The command may have failed
+   before or after the openspec CLI stage, so report only the state established by its output.
+
+6. **Display the deterministic result**
+
+   Only after the retry succeeds, show an archive completion summary including:
    - Change name
-   - Schema that was used
-   - Archive location
-   - Whether specs were synced (if applicable)
+   - schema that was used
+   - The actual archive location reported by the openspec CLI
+   - The guard-named capability merged by the fallback
    - Note about any warnings (incomplete artifacts/tasks)
 
-**Output On Success**
+## Output On Successful Retry
 
-```
-## Archive Complete
+```text
+## Guarded Archive Complete
 
+**Command:** just archive-change <change-name>
 **Change:** <change-name>
 **Schema:** <schema-name>
-**Archived to:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
-**Specs:** ✓ Synced to main specs (or "No delta specs" or "Sync skipped")
+**Archived to:** <exact location reported by the successful command>
+**Fallback merge:** <guard-named capability only>
+```text
+## Guardrails
 
-All artifacts complete. All tasks complete.
-```
-
-**Guardrails**
-- Always prompt for change selection if not provided
-- Use artifact graph (openspec status --json) for completion checking
-- Don't block archive on warnings - just inform and confirm
-- Preserve .openspec.yaml when moving to archive (it moves with the directory)
-- Show clear summary of what happened
-- If sync is requested, use openspec-sync-specs approach (agent-driven)
-- If delta specs exist, always run the sync assessment and show the combined summary before prompting
+- Use `just archive-change <change>` as the default sanctioned path
+- Enter this prose fallback only after `UNSAFE_PARTIAL_MODIFIED` names the capability
+- Never inspect or sync sibling capabilities through this fallback
+- Use the artifact graph (`openspec status --json`) for completion checking
+- Do not block archive on warnings; inform the user and confirm
+- Use the openspec-sync-specs intelligent-merge approach only for the guard-named capability
+- Make the named delta guard-safe, then retry `just archive-change <change>` as the only terminal
+  archive operation
+- Never archive directories directly or infer success after a non-zero retry

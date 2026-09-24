@@ -89,6 +89,7 @@ export function verifyGoals(opts: {
 
 		writeFileSync(file, stamp(text, ok ? "satisfied" : "VIOLATED", today));
 		mkdirSync(dirname(ledger), { recursive: true });
+		// Plain append is deliberate: goal stamps are per-worktree and shared ledger rows are append-only.
 		appendFileSync(ledger, today + "\t" + goalName + "\t" + (ok ? "PASS" : "FAIL") + "\t" + ms + "\n");
 	}
 	return { results, violations };

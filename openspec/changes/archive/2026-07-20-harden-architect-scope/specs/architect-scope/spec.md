@@ -1,4 +1,4 @@
-# architect-scope — spec
+# architect-scope—spec
 
 ## ADDED Requirements
 
@@ -25,5 +25,5 @@ allowing them.
 
 #### Scenario: Non-architect identified agents keep full tools
 
-- **WHEN** the current agent is positively identified as an agent other than `solution-architect` (e.g. `developer`)
+- **WHEN** the current agent is positively identified as an agent other than `solution-architect` (for example `developer`)
 - **THEN** the extension does not restrict its writes

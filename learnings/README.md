@@ -1,4 +1,4 @@
-# learnings/ — the scoped learning store
+# learnings/—the scoped learning store
 
 This is the harness's **scoped** memory: durable, glob-targeted rules distilled from real
 review and research findings, handed to the developer at BRIEF time only when the files
@@ -23,10 +23,10 @@ If a rule applies everywhere → AGENTS.md. If it applies to specific files → 
   `active` only on **human ack during `/opsx-retro`** (or when the same pattern is cited by
   N distinct review-log entries). A draft is never injected into a BRIEF.
 - **active → retired**: a learning that stops firing (see `just learnings-audit`) or is
-  superseded is retired. `learnings/` is a **mutable** store — it is deliberately **not**
+  superseded is retired. `learnings/` is a **mutable** store—it is deliberately **not**
   under the ratchet's one-way invariant (that invariant stays with AGENTS.md + lint rules).
-- **provenance is an immutable pointer**: `source.change` + `source.commit` (a SHA), never
-  a line number — review-log grows and rotates, so line-based provenance goes stale silently.
+- **provenance is an immutable pointer**: `source.change` + `source.commit` (a `sha`), never
+  a line number—review-log grows and rotates, so line-based provenance goes stale silently.
 
 ## Retrieval
 
@@ -38,11 +38,11 @@ fails loud if retrieval silently returns nothing when it must return something.
 
 ## The refutation core (why learnings compound)
 
-Every learning carries a `## Refutation` block — `conjectured → refuted_by → learned →
+Every learning carries a `## Refutation` block—`conjectured → refuted_by → learned →
 criterion_now` (David Deutsch's hard-to-vary shape, borrowed from the Algorithm's Changelog).
 A flat rule records the *what*; the refutation records *what belief was wrong and the evidence
 that broke it*. That is what lets accumulated learnings **compound** into a self-improvement
-loop instead of piling up — and it is the substrate `/opsx-compost` reads when proposing new
+loop instead of piling up—and it is the substrate `/opsx-compost` reads when proposing new
 doctrine. A learning without a refutation is an assumption with a rule attached.
 
 See `_TEMPLATE.md` for the entry schema.

@@ -1,4 +1,4 @@
-# shared-theme — delta
+# shared-theme—delta
 
 ## ADDED Requirements
 

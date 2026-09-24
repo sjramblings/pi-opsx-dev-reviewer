@@ -1,0 +1,20 @@
+# justfile.structurizr — the optional Structurizr diagram path.
+#
+# Installed only by `./install.sh --here <repo> --with-structurizr`. An ordinary install
+# contains none of this. Every recipe is a thin wrapper; all behaviour lives in the typed
+# tools under tools/, so the safety rules cannot be re-implemented differently in Just.
+#
+# The model argument is a compatibility affordance: omit it, or pass exactly
+# docs/architecture/structurizr/workspace.dsl. Anything else is CONFIG MODEL_PATH.
+
+# Render the team-owned Structurizr model to build/architecture/structurizr/.
+structurizr-render model="":
+    @bun tools/structurizr-render.ts {{ model }}
+
+# Remove generated Structurizr output owned by this run.
+structurizr-clean:
+    @bun tools/structurizr-render.ts --clean
+
+# Probe the pinned image and command interface on this native engine.
+structurizr-probe platform="":
+    @bun tools/structurizr-probe.ts --live --fixture tools/fixtures/structurizr/workspace.dsl --require-native {{ platform }}

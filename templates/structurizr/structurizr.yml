@@ -1,0 +1,127 @@
+name: structurizr
+
+# Renders the team-owned Structurizr model on the canonical native linux/amd64 target.
+# Installed only by ./install.sh --here <repo> --with-structurizr.
+#
+# The enforceable security claim starts at process creation: the render subprocess and
+# every container receive only named non-secret variables. This workflow does not claim
+# that GitHub service tokens are absent elsewhere in the runner job.
+
+on:
+  pull_request:
+    paths:
+      # The exact model. There is no includes glob, because includes are prohibited.
+      - docs/architecture/structurizr/workspace.dsl
+      - tools/structurizr-source.ts
+      - tools/structurizr-fs.ts
+      - tools/structurizr-docker.ts
+      - tools/structurizr-verify.ts
+      - tools/structurizr-render.ts
+      - tools/structurizr-probe.ts
+      - tools/structurizr-pin.ts
+      - tools/structurizr/**
+      - tools/vendor/structurizr-xml/**
+      - justfile.structurizr
+      - install.sh
+      - templates/structurizr/**
+      - .github/workflows/structurizr.yml
+  push:
+    branches:
+      - main
+    paths:
+      - docs/architecture/structurizr/workspace.dsl
+      - tools/structurizr-source.ts
+      - tools/structurizr-fs.ts
+      - tools/structurizr-docker.ts
+      - tools/structurizr-verify.ts
+      - tools/structurizr-render.ts
+      - tools/structurizr-probe.ts
+      - tools/structurizr-pin.ts
+      - tools/structurizr/**
+      - tools/vendor/structurizr-xml/**
+      - justfile.structurizr
+      - install.sh
+      - templates/structurizr/**
+      - .github/workflows/structurizr.yml
+  workflow_dispatch:
+
+# Read-only. Nothing else is granted: no registry scope, no federated identity, no write.
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: native-amd64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: 1.3.14
+
+      - name: Verify Bun provenance
+        run: |
+          set -euo pipefail
+          expected_version=1.3.14
+          expected_archive=951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f
+          expected_binary=9fd36f87e4b90b07632b987a2e4ec81ca15a62c81bf983190cea6d715be2ad74
+          release_url=https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip
+
+          actual_version=$(bun --version)
+          if [ "$actual_version" != "$expected_version" ]; then
+            echo "DEPENDENCY BUN_VERSION: bun $actual_version is not the pinned $expected_version" >&2
+            exit 1
+          fi
+
+          work=$(mktemp -d)
+          curl -fsSL -o "$work/bun.zip" "$release_url"
+          echo "$expected_archive  $work/bun.zip" | sha256sum -c -
+          unzip -q "$work/bun.zip" -d "$work"
+          echo "$expected_binary  $work/bun-linux-x64/bun" | sha256sum -c -
+          rm -rf "$work"
+
+      - name: Verify native engine before any platform export
+        run: |
+          set -euo pipefail
+          os_type=$(docker info --format '{{.OSType}}')
+          architecture=$(docker info --format '{{.Architecture}}')
+          if [ "$os_type" != "linux" ]; then
+            echo "DEPENDENCY PLATFORM: Docker server OSType is $os_type" >&2
+            exit 1
+          fi
+          case "$architecture" in
+            amd64|x86_64) ;;
+            *)
+              echo "DEPENDENCY PLATFORM: engine is $architecture, not native amd64; emulation is not supported" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Render
+        run: |
+          set -euo pipefail
+          job_home=$(mktemp -d)
+          job_tmp=$(mktemp -d)
+          env -i \
+            PATH="$PATH" \
+            HOME="$job_home" \
+            TMPDIR="$job_tmp" \
+            CI=true \
+            DOCKER_DEFAULT_PLATFORM=linux/amd64 \
+            BUN_CONFIG_NO_TELEMETRY=1 \
+            "$(command -v bun)" tools/structurizr-render.ts
+
+      - name: Upload verified output
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: structurizr-c4-${{ github.sha }}
+          path: build/architecture/structurizr/
+          if-no-files-found: error
+          retention-days: 14

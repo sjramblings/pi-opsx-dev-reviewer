@@ -1,4 +1,4 @@
-# arch-lint — delta
+# arch-lint—delta
 
 ## ADDED Requirements
 

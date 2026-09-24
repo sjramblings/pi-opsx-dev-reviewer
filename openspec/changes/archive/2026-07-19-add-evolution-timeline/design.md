@@ -1,4 +1,4 @@
-# Design — add-evolution-timeline
+# Design—add-evolution-timeline
 
 ## Context
 
@@ -6,8 +6,8 @@ The kit already treats `openspec/changes/` as the unit of work and ships tools t
 repo state deterministically (`arch-lint.ts`, `session-cost.ts`). This change adds a
 reader that turns the change log into a picture. The one interesting design question is
 where the boundary sits between deterministic code and a model, because the first cut of
-this feature was authored interactively and its most valuable moment — noticing "49
-requirements, zero retractions, most still in flight" — was a judgment call.
+this feature was authored interactively and its most valuable moment—noticing "49
+requirements, zero retractions, most still in flight"—was a judgment call.
 
 ## Goals / Non-Goals
 
@@ -16,7 +16,7 @@ requirements, zero retractions, most still in flight" — was a judgment call.
 - A repeatable, testable extraction that gives identical output for identical repo state.
 - A page that is complete and honest with no model in the loop.
 - A clean, optional seam for a model to sharpen the framing.
-- Portability: works against any OpenSpec repo the kit installs into, not just this one.
+- Portability: works against any `openspec` repo the kit installs into, not just this one.
 
 **Non-Goals:**
 
@@ -30,10 +30,10 @@ requirements, zero retractions, most still in flight" — was a judgment call.
 **Deterministic tool owns substance; the model owns only the hero thesis.** Parsing and
 rendering are pure functions of repo state, so they live in TypeScript where they are
 unit-tested and reproducible (Code-Before-Prompts). The model cannot change any count,
-any requirement, or any scenario — only the headline and subhead, and only from the
+any requirement, or any scenario—only the headline and subhead, and only from the
 extracted model. Rationale: the value of a history view is that you trust its numbers;
 a model in the counting path forfeits that. Alternative rejected: an agent that authors
-the whole page — non-reproducible, and it would let framing drift from the data.
+the whole page—non-reproducible, and it would let framing drift from the data.
 
 **Zero-retraction is computed, not narrated.** Whether every requirement is ADDED is a
 mechanical fact, so the deterministic thesis already states it. The narrator earns its
@@ -48,7 +48,7 @@ specific inference binary and keeps the model path strictly opt-in.
 ## Risks / Trade-offs
 
 - **[Risk] git-date lookup is slow on large histories** → dates are read once per change
-  folder, not per file; acceptable for the change-count scale OpenSpec repos reach.
+  folder, not per file; acceptable for the change-count scale `openspec` repos reach.
 - **[Risk] the template drifts from the extractor's model shape** → the extractor and
   template share one JSON contract; a shape change that the template does not read is
   caught by the smoke assertion in the test that the emitted page contains the stat row.
@@ -62,4 +62,4 @@ Additive. New files only; no existing recipe, tool, or agent changes behaviour.
 ## Open Questions
 
 - Whether to later add per-capability lineage (which change first introduced each
-  capability) as a second view — deferred until the timeline is in use.
+  capability) as a second view—deferred until the timeline is in use.

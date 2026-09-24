@@ -10,7 +10,7 @@ decision-makers: [maintainer]
 
 The kit gates every implementation task through an adversarial reviewer. If the reviewer
 runs on the same model family as the developer, they share a training corpus and therefore
-share blind spots — the reviewer is likely to miss exactly the errors the developer was
+share blind spots—the reviewer is likely to miss exactly the errors the developer was
 prone to make. What model should the reviewer run on?
 
 ## Considered Options
@@ -23,7 +23,7 @@ prone to make. What model should the reviewer run on?
 
 Chosen: a different family from the developer. Cross-family review catches correlated
 blind spots that same-family review misses, and the marginal cost of one extra provider is
-low. A full panel is deferred — one cross-family reviewer captures most of the benefit at a
+low. A full panel is deferred—one cross-family reviewer captures most of the benefit at a
 fraction of the token cost.
 
 ## Consequences

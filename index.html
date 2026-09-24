@@ -66,14 +66,17 @@
 </style>
 </head>
 <body>
-<nav class="top">
+<nav class="top" aria-label="Reference sections">
   <a href="#pipeline">Pipeline</a>
   <a href="#protections">Protections</a>
   <a href="#agents">Agents</a>
   <a href="#extensions">Extensions</a>
   <a href="#recipes">Recipes</a>
-  <a href="#schema">Schema</a>
+  <a href="#structurizr">Diagrams</a>
+<a href="#schema">Schema</a>
   <a href="#lifecycle">Lifecycle</a>
+  <a href="#worktrees">Worktrees</a>
+  <a href="#close-out">Close-out</a>
   <a href="#use">How to use</a>
   <a href="#loader">pi constraints</a>
 </nav>
@@ -126,10 +129,11 @@ architecture changed; and mechanical gates verify presence, evidence integrity, 
 </div>
 <div class="card c-red">
   <div><span class="badge b-red">fail closed</span></div>
-  <h3>Startup self-test canary (harness-selftest)</h3>
-  <p>The single scariest failure is a guard that silently doesn&#39;t load. This canary runs at
-  <code>session_start</code>; if <code>force-delegate</code> did not load, it prints a loud <code>HARNESS UNGUARDED</code>
-  banner and tells the agent to halt. A silent enforcer failure can no longer pass unnoticed.</p>
+  <h3>Local and global startup canaries</h3>
+  <p>The single scariest failure is a guard that silently doesn&#39;t load. The local
+  <code>harness-selftest</code> checks a provisioned checkout. The global <code>worktree-canary</code> also sees a
+  tracked <code>.harness-marker</code> in a bare or unprovisioned linked worktree; without the current-process
+  <code>force-delegate</code> handshake, it prints <code>HARNESS UNGUARDED</code> and exits before commands run.</p>
 </div>
 <div class="card c-red">
   <div><span class="badge b-red">fail closed</span></div>
@@ -244,13 +248,15 @@ installer now warns when all pins share one provider. See the <a href="README.md
 billing trade-off.</p>
 
 <h2 id="extensions">Extensions</h2>
-<p class="sub">Copied per-project into <code>&lt;repo&gt;/.pi/extensions/</code>. They enforce the boundaries structurally
-via pi&#39;s <code>tool_call</code> and <code>session_start</code> events.</p>
+<p class="sub">The project guards are copied into <code>&lt;repo&gt;/.pi/extensions/</code>. The worktree canary is installed
+only in pi&#39;s global extension directory so a missing local guard set cannot hide the failure. They enforce the
+boundaries structurally via pi&#39;s <code>tool_call</code> and <code>session_start</code> events.</p>
 <div class="tablewrap"><table>
 <tr><th>Extension</th><th>Fires on</th><th>What it enforces</th></tr>
 <tr><td><code>force-delegate</code></td><td><code>tool_call</code></td><td>Main agent read-only: write/edit blocked, bash restricted to a read-only allowlist. No-ops inside subagents.</td></tr>
 <tr><td><code>architect-scope</code></td><td><code>tool_call</code></td><td>Fail-closed path-gate: the architect writes design artifacts only; architecture-writer writes <code>docs/architecture/**</code> only; unidentified agents blocked.</td></tr>
-<tr><td><code>harness-selftest</code></td><td><code>session_start</code></td><td>Loud <code>HARNESS UNGUARDED</code> halt if force-delegate did not load.</td></tr>
+<tr><td><code>harness-selftest</code></td><td><code>session_start</code></td><td>Local <code>HARNESS UNGUARDED</code> halt if force-delegate did not load.</td></tr>
+<tr><td><code>worktree-canary</code></td><td><code>session_start</code></td><td>Global, marker-based halt for an unguarded top-level harness checkout; valid delegated children are exempt and retain full tools.</td></tr>
 <tr><td><code>developer-guard</code></td><td><code>tool_call</code></td><td>Blocks catastrophic bash (recursive rm, force-push, sudo, dd/mkfs, curl-pipe-shell, fork bomb) for every agent.</td></tr>
 <tr><td><code>branch-guard</code></td><td><code>tool_call</code></td><td>Enforces PR flow: blocks commit/push/force-push to protected branches (main/master) for every agent.</td></tr>
 <tr><td><code>opsx-reminder</code></td><td><code>session_start</code></td><td>Pins the pending lifecycle actions (all-ticked un-archived change &rarr; <code>/opsx-retro</code>; draft learnings awaiting promotion) as a persistent <code>setWidget</code> panel above the editor + a <code>setStatus</code> footer badge, rendered in the active pi theme; clears itself when nothing pends.</td></tr>
@@ -265,10 +271,13 @@ false pass); the guards never skip.</p>
 <div class="tablewrap"><table>
 <tr><th>Recipe</th><th>Purpose</th><th>Skips?</th></tr>
 <tr><td><code>just check-extensions</code></td><td>Rejects pi load-breakers (regex literals, backticks, apostrophes) in every extension.</td><td>Never</td></tr>
+<tr><td><code>just worktree &lt;name&gt;</code></td><td>Create a sibling <code>session/&lt;name&gt;</code> worktree and provision only local guards plus its shared-memory link.</td><td>Never</td></tr>
+<tr><td><code>just worktree-rm &lt;name&gt;</code></td><td>Safely remove that provisioned sibling without deleting primary memory or the shared Git object store.</td><td>Never</td></tr>
 <tr><td><code>just verify-gate</code></td><td>Deterministic pre-review pass: <code>tsc</code>/<code>eslint</code>/<code>semgrep</code>. The LLM reviewer only judges what a linter cannot.</td><td>Graceful</td></tr>
 <tr><td><code>just probe-check &lt;change&gt;</code></td><td>Every task in <code>tasks.md</code> must carry a <code>probe:</code> line (frozen before apply).</td><td>Never</td></tr>
 <tr><td><code>just run-probe &lt;change&gt; &lt;id&gt; &lt;cmd&gt;</code></td><td>Neutral executor: runs the probe, writes a sha256-attested transcript to the ledger.</td><td>Never</td></tr>
-<tr><td><code>just archive-check &lt;change&gt;</code></td><td>Blocks archive unless the review ledger has a verdict, every attestation hash still matches, and architecture-impacting changes refreshed <code>docs/architecture/</code> (or records the skip reason).</td><td>Never</td></tr>
+<tr><td><code>just archive-change &lt;change&gt;</code></td><td>Sanctioned close-out: runs the ledger gate, promotion guard, OpenSpec archival, then lint normalisation for promoted specs.</td><td>Never</td></tr>
+<tr><td><code>just archive-check &lt;change&gt;</code></td><td>Internal ledger and architecture gate run by <code>archive-change</code>; not a separate close-out command.</td><td>Never</td></tr>
 <tr><td><code>just brief-check &lt;file&gt;</code></td><td>A delegation brief must name <code>files:</code>, <code>probe:</code>, <code>out-of-scope:</code>, <code>spec:</code>.</td><td>Never</td></tr>
 <tr><td><code>just learnings-preview [ref]</code></td><td>Read-path: prints the active <code>learnings/</code> whose scope glob matches the files changed since <code>ref</code> (the scoped tier of BRIEF context).</td><td>Never</td></tr>
 <tr><td><code>just check-learnings</code></td><td>Canary: fails loud if retrieval misses a diff that must match, or returns a false positive (hermetic fixture, both directions).</td><td>Never</td></tr>
@@ -284,13 +293,69 @@ false pass); the guards never skip.</p>
 <tr><td><code>just docs-lint-setup</code></td><td>Installs the docs-lint toolchain.</td><td>—</td></tr>
 </table></div>
 
+<h2 id="structurizr">Architecture diagrams: Mermaid default, Structurizr optional</h2>
+
+<p>Mermaid is the default and needs no setup. <code>just arch-lint</code> requires a Mermaid diagram
+in the context and scope, building block view, and deployment view sections. <strong>Structurizr is
+an optional extra</strong> that derives C4 context, container, and component views from one model.
+It never replaces Mermaid, and a generated SVG can never satisfy a Mermaid requirement. Full guide:
+<a href="docs/structurizr.md">docs/structurizr.md</a>.</p>
+
+<pre><code>./install.sh --here /path/to/repo --with-structurizr   # only activation path
+just structurizr-render                                # -&gt; build/architecture/structurizr/
+just structurizr-clean                                 # remove output owned by this run
+./install.sh --here /path/to/repo --remove-structurizr # keeps your model</code></pre>
+
+<p>An ordinary install carries no Structurizr inventory and performs no Docker or Bun probe.</p>
+
+<div class="table-wrap"><table>
+<tr><th>Aspect</th><th>Contract</th></tr>
+<tr><td>Prerequisites</td><td>A <em>native</em> Docker engine on <code>linux/amd64</code> or
+<code>linux/arm64</code>, and Bun <code>1.3.14</code> exactly. Emulation is refused: no QEMU,
+binfmt, or Rosetta-for-Linux.</td></tr>
+<tr><td>Renderer</td><td>Pinned by digest to
+<code>structurizr/structurizr:2026.06.28-playwright@sha256:9bdc861e…17f8c</code>. The retired
+<code>structurizr/cli</code> and <code>structurizr/lite</code> distributions are rejected, as are
+<code>latest</code> and tag-only references.</td></tr>
+<tr><td>Your model</td><td><code>docs/architecture/structurizr/workspace.dsl</code> is team-owned:
+seeded only when absent, never replaced, preserved byte-for-byte on rerun. One file, at most 5 MiB,
+no includes, workspace extension, scripts, or plugins.</td></tr>
+<tr><td>Output</td><td><code>build/architecture/structurizr/</code> — view SVGs, the exported
+<code>workspace.json</code>, and a <code>manifest.json</code> recording source hash, image, native
+platform, versions, and each file's size and SHA-256. Git-ignored; never committed.</td></tr>
+<tr><td>Not a stable API</td><td>The renderer writes wall-clock metadata, so two runs of an
+unchanged model can produce different SVG bytes. The gate never compares two renders; the manifest
+is the stable contract.</td></tr>
+<tr><td>Safety</td><td>Accept or reject, never rewrite. An SVG must be passive and self-contained:
+no script, event handler, foreign content, or external reference — or nothing is published.</td></tr>
+<tr><td>Credential boundary</td><td>The renderer subprocess and every container receive only named
+non-secret variables. The Docker socket, repo root, model parent, home, and credential directories
+are never mounted. CI runs with only <code>contents: read</code>, pinned actions, and a 14-day
+artifact.</td></tr>
+<tr><td>Pin updates</td><td>Reviewed only, and require native fixture evidence on <em>both</em>
+targets. A published manifest is not evidence that both platform commands work.</td></tr>
+</table></div>
+
+<p>Exactly one primary <code>&lt;CLASS&gt; &lt;CODE&gt;:</code> line is emitted, chosen by a fixed
+precedence: <code>CONFIG INVOCATION</code> → <code>IO LOCK_BUSY</code> →
+<code>IO UNSAFE_OUTPUT</code>, <code>IO PATH</code> → <code>CONFIG PIN</code>,
+<code>CONFIG MODEL_PATH</code>, <code>CONFIG SOURCE_DIRECTIVE</code>,
+<code>CONFIG WORKSPACE_EXTENDS</code> → <code>DEPENDENCY DOCKER</code>,
+<code>DEPENDENCY PLATFORM</code>, <code>DEPENDENCY IMAGE</code>,
+<code>DEPENDENCY BUN_VERSION</code> → <code>VALIDATION DSL</code>,
+<code>VALIDATION TIMEOUT</code> → <code>RENDER JSON</code>, <code>RENDER SVG</code>,
+<code>RENDER TIMEOUT</code> → <code>CONSISTENCY JSON</code>, <code>CONSISTENCY LINEAGE</code>,
+<code>CONSISTENCY VIEW_KEY</code>, <code>CONSISTENCY SVG_SAFETY</code> → <code>IO PUBLISH</code>,
+<code>IO CLEANUP</code>. No fallback exists: a failed render publishes nothing and leaves the
+final output absent rather than stale.</p>
+
 <h2 id="schema">OpenSpec schema &amp; prompts</h2>
 <p class="sub">The <code>dev-reviewer</code> schema bakes the whole contract into the OpenSpec workflow so it survives
 <code>openspec update</code> (unlike a hand-edited prompt).</p>
 <ul class="lead-list">
   <li><strong>Artifacts:</strong> proposal → specs → design → tasks → <code>review-report</code> (the ledger) → <code>docs</code> (the doc delta) → <code>architecture</code> (<code>docs/architecture/</code>, owned by architecture-writer). The <code>apply</code> template mandates developer→reviewer delegation.</li>
   <li><strong>Presence honesty:</strong> OpenSpec 1.4.1 does <em>not</em> hard-gate archive on a missing artifact — that is what <code>just archive-check</code> exists to enforce.</li>
-  <li><strong>Prompt templates</strong> (<code>~/.pi/agent/prompts/</code>): <code>/opsx-loop &lt;change&gt;</code> drives the delegation loop, <code>/opsx-review &lt;change&gt;</code> runs one adversarial review, <code>/opsx-retro &lt;change&gt;</code> ratchets findings into rules before archive, <code>/opsx-advise &lt;change&gt;</code> gives a cross-family second opinion on the approach at commitment boundaries, and <code>/opsx-compost</code> mines a week of failures, reflections, and tool-events into at most three proposed changes.</li>
+  <li><strong>Prompt templates</strong> (<code>~/.pi/agent/prompts/</code>): <code>/opsx-loop &lt;change&gt; &lt;session-path&gt;</code> drives the delegation loop, <code>/opsx-review &lt;change&gt;</code> runs one adversarial review, <code>/opsx-retro &lt;change&gt;</code> ratchets findings into rules before guarded close-out, <code>/opsx-advise &lt;change&gt;</code> gives a cross-family second opinion on the approach at commitment boundaries, and <code>/opsx-compost</code> mines a week of failures, reflections, and tool-events into at most three proposed changes.</li>
   <li><strong>Algorithm grafts</strong>: learnings carry a <code>conjectured&rarr;refuted_by&rarr;learned&rarr;criterion_now</code> refutation core; bug-fix tasks are reproduce-first (a failing repro is the first probe, red&rarr;green, or the reviewer BLOCKs); and the <strong>meta-loop</strong> (<code>/opsx-retro</code> reflection &rarr; <code>/opsx-compost</code>) proposes process/doctrine changes &mdash; propose-only, human sign-off, grounded in the empirical signals, never self-applied.</li>
   <li><strong>Scoped learning store</strong> (<code>learnings/</code>): <code>/opsx-retro</code> routes path-scoped findings here (not <code>AGENTS.md</code>), and <code>/opsx-loop</code> injects the matching ones at BRIEF via <code>just learnings-preview</code> &mdash; one fact, one writable home.</li>
   <li><strong>Trust ledger + standing goals</strong>: autonomy graduates per skill in <code>memory/trust.tsv</code> (<code>just trust</code>), and every finished change becomes a re-verified invariant in <code>goals/</code> (<code>just goals</code>, daily) &mdash; nothing that passed once goes unwatched.</li>
@@ -302,9 +367,7 @@ sequence by cadence — each pass leaves the harness knowing a little more.</p>
 
 <p><strong>Per change — the inner loop</strong></p>
 <ol class="steps">
-  <li><code>/opsx-loop &lt;change&gt;</code> — drive each task through developer → reviewer. At BRIEF it
-  auto-runs <code>just learnings-preview</code>, handing the developer the scoped learnings for the files
-  it touches; every verdict is appended to <code>review-log.md</code>.</li>
+  <li>Run pi's <code>/session</code>, copy its absolute <code>File:</code> path, then run <code>/opsx-loop &lt;change&gt; "&lt;session-path&gt;"</code>. The quoted parent-session path lets the loop record each reviewer verdict before the developer ticks the task. Do not use <code>&lt;session.jsonl&gt;</code> literally: the shell treats it as input redirection.</li>
   <li><code>just next &lt;change&gt;</code> — at any point, where the change is and the one command to run next.</li>
   <li><code>just trust-log &lt;skill&gt; &lt;pass|fail&gt;</code> — record each outcome so autonomy graduates per
   skill (<code>just trust</code> shows the tiers).</li>
@@ -317,8 +380,7 @@ sequence by cadence — each pass leaves the harness knowing a little more.</p>
   <code>active</code>.</li>
   <li><code>just learnings-audit</code> + <code>just check-learnings</code> — confirm provenance, and that the
   retrieval path is live.</li>
-  <li><code>just archive-check &lt;change&gt;</code> → <code>openspec archive &lt;change&gt;</code> — graduate the
-  change, then drop a <code>goals/&lt;name&gt;.md</code> predicate for what must stay true.</li>
+  <li><code>just archive-change &lt;change&gt;</code> — run the ledger gate, promotion guard, OpenSpec archival, and promoted-spec lint normalisation. Then drop a <code>goals/&lt;name&gt;.md</code> predicate for what must stay true.</li>
 </ol>
 
 <p><strong>Daily — the sentinel</strong></p>
@@ -336,13 +398,72 @@ sequence by cadence — each pass leaves the harness knowing a little more.</p>
 <p class="callout info">Each pass leaves the harness knowing a little more — scoped learnings for
 next time, a higher trust tier, one more invariant guarded. Nothing that passed once goes unwatched.</p>
 
+<h2 id="worktrees">Concurrent changes in worktrees</h2>
+<p class="sub">One session, branch, and active OpenSpec change per sibling checkout, with shared memory ledgers.</p>
+
+<h3>One-time global setup</h3>
+<pre><code>./install.sh</code></pre>
+<p>The global install places the fail-closed canary directly at
+<code>${PI_CODING_AGENT_DIR:-~/.pi/agent}/extensions/worktree-canary/index.ts</code>. It is deliberately excluded
+from every project-local extension copy.</p>
+
+<h3>Create and enter a guarded sibling</h3>
+<p>Run the creation recipe from the <strong>primary checkout</strong>:</p>
+<pre><code>just worktree add-foo
+cd ../pi-opsx-dev-reviewer--add-foo
+pi</code></pre>
+<p><code>just worktree &lt;name&gt;</code> creates <code>../&lt;repo&gt;--&lt;name&gt;</code> on
+<code>session/&lt;name&gt;</code>. Provisioning copies only the gitignored local guards into
+<code>.pi/extensions/</code> and links <code>memory/</code> to the primary checkout. Tracked
+<code>openspec/</code>, <code>tools/</code>, <code>schemas/</code>, and <code>config.yaml</code> come from Git and are
+not recopied. Start pi in the sibling and work on exactly one active OpenSpec change owned by that branch.</p>
+
+<div class="callout info">
+  <strong>Fail closed before commands:</strong> every checkout receives the tracked <code>.harness-marker</code> from
+  Git. In a marker-bearing top-level process, the global canary accepts only a current-PID handshake from
+  <code>force-delegate</code>. A bare, unprovisioned, or present-but-unloaded guard set produces a loud
+  <code>HARNESS UNGUARDED</code> exit before the first command. Valid delegated children are exempt and retain
+  their full tools.
+</div>
+<p>If an old installation left <code>.pi/extensions/worktree-canary</code> locally, both <code>--here</code> and
+<code>--guards</code> refuse to continue. Inspect the path and remove it manually only after confirming it is the
+stale local copy, then rerun the installer.</p>
+
+<h3>Share ledgers without over-locking</h3>
+<ul class="lead-list">
+  <li><code>memory/trust.tsv</code> uses a lock and atomic rename because each update reads and rewrites the whole file.</li>
+  <li><code>memory/goal-ledger.tsv</code> and <code>memory/tool-events.jsonl</code> remain plain, lock-free appends.</li>
+  <li>Each worktree owns its per-goal <code>goals/&lt;name&gt;.md</code> files.</li>
+</ul>
+<p>Do not parallelize changes that modify the same <code>openspec/specs/&lt;capability&gt;</code>; their promoted deltas
+collide at merge. Archive a change from its owning worktree branch using the guarded close-out flow, then land that
+branch through a pull request.</p>
+
+<h3>Remove the sibling from the primary checkout</h3>
+<pre><code>just worktree-rm add-foo</code></pre>
+<p>The recipe validates the named registered branch, removes only the sibling&#39;s local <code>.pi</code> and
+<code>memory</code> symlink, removes and prunes its worktree registration, and never deletes the primary memory target
+or shared Git object store.</p>
+
+<h2 id="close-out">Guarded close-out and verdict recording</h2>
+<p>Run <code>/opsx-retro &lt;change&gt;</code> after the last task, then run:</p>
+<pre><code>just archive-change add-foo</code></pre>
+<p>This recipe performs the ledger check, promotion guard, OpenSpec archival, and lint normalisation in order. A failing stage stops the sequence. Do not use raw <code>openspec archive</code> as a close-out command.</p>
+<p>The main agent may run exactly two bookkeeping recipes: <code>just record-verdict</code> and <code>just archive-change</code>. The guard still blocks its <code>write</code> and <code>edit</code> tools, arbitrary mutation, other <code>just</code> recipes, redirection, output flags, and environment assignments. The developer subagent authors code, specs, and design artifacts.</p>
+<p>Before the loop, run pi's <code>/session</code> and copy the absolute <code>File:</code> path from the persisted top-level session. The loop protocol requires that absolute persisted session path. Quote it:</p>
+<pre><code>/opsx-loop add-foo "/Users/alice/.pi/agent/sessions/--work-repo--/session.jsonl"</code></pre>
+<p>The loop renders a two-argument verdict command and runs it before the developer ticks the task:</p>
+<pre><code>just record-verdict "add-foo" "/Users/alice/.pi/agent/sessions/--work-repo--/session.jsonl"</code></pre>
+<p><code>record-verdict</code> reads the latest reviewer verdict from that parent-session JSONL and appends it byte-for-byte. The recorder itself accepts any readable path, including a relative path; the absolute persisted path is a loop-protocol requirement. A literal <code>&lt;session.jsonl&gt;</code> redirects shell input; do not use it as a placeholder. If <code>/session</code> reports <code>In-memory</code>, stop and use a persisted session.</p>
+<p>A partial <code>MODIFIED</code> requirement can drop existing body text or scenarios because OpenSpec replaces that requirement. The promotion guard refuses with <code>UNSAFE_PARTIAL_MODIFIED</code> before promotion and names the capability. Use the agent-driven intelligent merge for that capability only, restate the merged requirement completely in its delta, then retry <code>just archive-change &lt;change&gt;</code>. Do not change sibling capabilities or archive a directory yourself.</p>
+
 <h2 id="use">How to use</h2>
 
 <h3>1. Install (global, per machine)</h3>
 <pre><code>./install.sh</code></pre>
-<p>Installs <code>@mjakl/pi-subagent</code>, copies the six agent files and the five prompt templates into
-<code>~/.pi/agent/</code>, and prints a model sanity check. Adjust any <code>model:</code> line to what
-<code>pi --list-models</code> shows on your machine.</p>
+<p>Installs <code>@mjakl/pi-subagent</code>, copies the agent files and prompt templates into
+<code>~/.pi/agent/</code>, installs the global worktree canary, and prints a model sanity check. Adjust any
+<code>model:</code> line to what <code>pi --list-models</code> shows on your machine.</p>
 
 <h3>2. Use it ad hoc (no OpenSpec)</h3>
 <pre><code>pi -p "Implement &lt;X&gt; with the developer agent, then have the
@@ -367,7 +488,7 @@ cp -r extensions/developer-guard  &lt;repo&gt;/.pi/extensions/</code></pre></li>
   <li><strong>Gate</strong> deterministically — <code>just verify-gate</code> and <code>just run-probe</code> attest the frozen probe.</li>
   <li><strong>Review</strong> — the reviewer receives the raw diff + attested evidence, with the developer&#39;s narrative quarantined as untrusted.</li>
   <li><strong>Ledger</strong> — the verdict is appended to <code>review-log.md</code>; only a PASS (no P0/P1) completes the task.</li>
-  <li><strong>Retro</strong> — <code>/opsx-retro</code> ratchets recurring findings, then <code>just archive-check</code> guards the archive.</li>
+  <li><strong>Retro</strong> — <code>/opsx-retro</code> ratchets recurring findings, then <code>just archive-change</code> performs guarded close-out.</li>
 </ol>
 
 <h3>5. Verify the guard is actually on</h3>

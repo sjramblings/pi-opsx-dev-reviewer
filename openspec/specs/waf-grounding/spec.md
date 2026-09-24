@@ -1,4 +1,4 @@
-# waf-grounding Specification
+# WAF-grounding Specification
 
 ## Purpose
 

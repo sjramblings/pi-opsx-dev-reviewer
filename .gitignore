@@ -4,3 +4,12 @@ node_modules/
 memory/
 .claude/
 architecture-evolution.html
+.lycheecache
+styles/Google/
+styles/write-good/
+
+# >>> structurizr (managed by install.sh) >>>
+/build/architecture/structurizr/
+/build/architecture/.structurizr-lock
+/build/architecture/.structurizr-stage-*/
+# <<< structurizr (managed by install.sh) <<<

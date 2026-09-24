@@ -1,4 +1,4 @@
-# waf-grounding — delta
+# WAF-grounding—delta
 
 ## ADDED Requirements
 
