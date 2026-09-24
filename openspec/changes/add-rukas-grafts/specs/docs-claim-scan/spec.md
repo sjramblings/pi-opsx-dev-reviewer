@@ -6,7 +6,7 @@
 
 `just claim-scan` SHALL read the lines a diff adds to Markdown files outside `openspec/changes/`
 and flag each version number or size-with-unit that appears in no other file, and each
-backticked relative file path that does not exist.
+relative file path in backticks that does not exist.
 
 #### Scenario: An invented size is flagged
 
@@ -20,7 +20,7 @@ backticked relative file path that does not exist.
 
 #### Scenario: A missing path is flagged
 
-- **WHEN** a doc adds a backticked path `tools/nope.ts` that does not exist
+- **WHEN** a doc adds the path `tools/nope.ts` in backticks that does not exist
 - **THEN** the scan flags it
 
 ### Requirement: The tech-writer and reviewer can run the gates

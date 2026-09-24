@@ -26,7 +26,7 @@ Non-goals:
 
 ## Decisions
 
-**D1. The round cap lives in `record-verdict`, not a new recipe.** The orchestrator's bash is
+**D1. The round cap lives in `record-verdict`, not a new recipe.** The bash of the orchestrator is
 pinned by `force-delegate` to read-only commands plus `just record-verdict` and
 `just archive-change`. A new park recipe would need a new allowlist entry that writes. Counting
 inside `record-verdict`, which already appends to the ledger, adds no new capability. The
@@ -38,7 +38,7 @@ Exit code 3 on park makes the stop unmissable to the orchestrator.
 source and tests, which name the markers as strings, would trip it. Net counting (added minus
 removed per file) lets a refactor that moves a skip pass.
 
-**D3. Falsely-green only fires when a task declares a source file.** Docs-only tasks
+**D3. The falsely green check only fires when a task declares a source file.** Docs-only tasks
 legitimately change no source. A ticked task that declared source paths and changed none of
 its declared paths fails.
 
@@ -53,7 +53,7 @@ unnecessary: no agent in this kit legitimately issues eight identical calls in a
 
 **D6. `claim-scan` backs a token by any other file.** Truth has no oracle; presence does. A
 version or size added to a doc must occur in some file other than the one asserting it, and a
-backticked relative path must exist.
+relative file path in backticks must exist.
 
 ## Risks / Trade-offs
 
@@ -77,6 +77,6 @@ None.
 ## Credit
 
 Ideas ported from pi-rukas, Apache-2.0: loop-bounded fix rounds (`AGENTS.md` §1), skip-marker
-ratchet (`work-driver-skip-ratchet.ts`), falsely-green check (`work-driver-falsily-green.ts`),
+ratchet (`work-driver-skip-ratchet.ts`), falsely green check (`work-driver-falsily-green.ts`),
 streak loop detector (`loop-detector.ts`), Pi compatibility line and drift gate
 (`docs/pi-compatibility.md`), and claim scan (`claim-scan.ts`).

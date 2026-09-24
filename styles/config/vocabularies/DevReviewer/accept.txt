@@ -199,3 +199,5 @@ project_trust
 rerender
 unlinking
 unstaged
+Janni
+Turunen

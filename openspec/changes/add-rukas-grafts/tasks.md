@@ -22,10 +22,10 @@
 
 ## 2. Diff gate (spec: diff-gate)
 
-- [ ] 2.1 Add `tools/diff-gate.ts` with a net skip-marker check and a falsely-green check, and
+- [ ] 2.1 Add `tools/diff-gate.ts` with a net skip-marker check and a falsely green check, and
       a `just diff-gate` recipe.
       files: `tools/diff-gate.ts`, `tools/diff-gate.test.ts`, `justfile.opsx`, `install.sh`
-      probe: `bun test tools/diff-gate.test.ts` passes, covering added skip, moved skip, string-literal marker, falsely-green, and docs-only exemption.
+      probe: `bun test tools/diff-gate.test.ts` passes, covering added skip, moved skip, string-literal marker, falsely green, and docs-only exemption.
       out-of-scope: wiring diff-gate into verify-gate.
       spec: `diff-gate`
       parallel: b

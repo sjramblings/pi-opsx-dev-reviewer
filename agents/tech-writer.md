@@ -56,7 +56,7 @@ Run the gate: `just docs-lint` (markdownlint + Vale + lychee + cspell, skipping 
 tool not installed). Fix until it is clean. Quote the actual output.
 
 Then run `just claim-scan`. It flags every version number or size you added that no other
-file in the repo contains, and every backticked path that does not exist. For each finding,
+file in the repo contains, and every file path in backticks that does not exist. For each finding,
 either cite the file that backs the claim or remove the claim. Never invent a specific to
 make prose sound concrete. Fix until it is clean. Quote the actual output.
 
