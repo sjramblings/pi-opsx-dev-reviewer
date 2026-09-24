@@ -429,12 +429,13 @@ install_project() {
      "$HERE"/tools/assess-tool-events.ts "$HERE"/tools/waf-grounding.ts \
      "$HERE"/tools/arch-lint.ts "$HERE"/tools/check-doc-contracts.ts "$HERE"/tools/pylib.ts \
      "$HERE"/tools/architecture-html.ts "$HERE"/tools/architecture.template.html \
-     "$HERE"/tools/evolution-timeline.ts "$HERE"/tools/evolution-timeline.template.html "$TARGET/tools/"
+     "$HERE"/tools/evolution-timeline.ts "$HERE"/tools/evolution-timeline.template.html \
+     "$HERE"/tools/diff-gate.ts "$TARGET/tools/"
   mkdir -p "$TARGET/tools/lib"
   safe_cp "$HERE"/tools/lib/theme.ts "$HERE"/tools/lib/theme.css \
      "$HERE"/tools/lib/mermaid.min.js "$HERE"/tools/lib/mermaid.pin.json \
      "$HERE"/tools/lib/ledger-lock.ts "$TARGET/tools/lib/"
-  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, check-doc-contracts, pylib, architecture-html, evolution-timeline + templates + shared theme + ledger lock)"
+  echo "  · tools → tools/ (select-learnings, audit-learnings, trust, verify-goals, session-cost, assess-tool-events, waf-grounding, arch-lint, check-doc-contracts, pylib, architecture-html, evolution-timeline, diff-gate + templates + shared theme + ledger lock)"
 
   # 3. OpenSpec dev-reviewer schema + config. A repo has exactly ONE schema; if this repo
   #    already uses a different one, the dev-reviewer apply flow is mutually exclusive with
