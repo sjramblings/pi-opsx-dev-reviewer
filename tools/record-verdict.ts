@@ -250,12 +250,16 @@ export function recordVerdict(
 	const state = blockState(updated, taskId);
 	if (state.rounds === 0) return { status: "appended", taskId, toolCallId: verdict.toolCallId };
 	const latestIsBlock = /^VERDICT:[ \t]*BLOCK\b/m.test(verdict.text);
-	if (latestIsBlock && state.rounds >= cap && !state.parked) {
-		try {
-			appendFileSync(ledgerPath, parkedEntry(updated, taskId, state.rounds, cap), "utf8");
-		} catch (error: unknown) {
-			const detail = error instanceof Error ? error.message : String(error);
-			return fail("LEDGER_APPEND_FAILED", `${ledgerPath}: ${detail}`);
+	if (latestIsBlock && state.rounds >= cap) {
+		// Park once; every later BLOCK on a parked task reports parked again, so an orchestrator
+		// that ignored one stop signal still gets the next one.
+		if (!state.parked) {
+			try {
+				appendFileSync(ledgerPath, parkedEntry(updated, taskId, state.rounds, cap), "utf8");
+			} catch (error: unknown) {
+				const detail = error instanceof Error ? error.message : String(error);
+				return fail("LEDGER_APPEND_FAILED", `${ledgerPath}: ${detail}`);
+			}
 		}
 		return { status: "parked", taskId, toolCallId: verdict.toolCallId, blockRounds: state.rounds, cap };
 	}

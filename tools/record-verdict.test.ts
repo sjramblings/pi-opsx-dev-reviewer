@@ -351,3 +351,14 @@ test("CLI exits 3 and says stop when a task parks", () => {
 		}),
 	);
 });
+
+test("a BLOCK recorded after the task parked reports parked again without a second PARKED entry", () => {
+	withCap(undefined, () =>
+		withWorkspace((workspace) => {
+			const results = recordBlocks(workspace, 4);
+			expect(results.map((r) => r.status)).toEqual(["appended", "appended", "parked", "parked"]);
+			expect(results[3]?.blockRounds).toBe(4);
+			expect(readFileSync(workspace.ledgerPath, "utf8").match(/^PARKED:/gm)).toHaveLength(1);
+		}),
+	);
+});

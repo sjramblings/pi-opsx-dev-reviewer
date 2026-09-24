@@ -22,6 +22,7 @@ import { join } from "node:path";
 
 export const SKIP_MARKERS = [
 	".skip(",
+	".skipIf(",
 	".only(",
 	".todo(",
 	"xit(",
@@ -61,16 +62,29 @@ export function stripStrings(line: string): string {
 	return out;
 }
 
-function isCommentLine(code: string): boolean {
+/**
+ * The code part of one line: strings emptied, closed block comments removed, anything before a
+ * closing "*\/" dropped, then "" for a line that is a comment. Whitespace before "(" is collapsed
+ * so "it.skip (" is still "it.skip(".
+ *
+ * Known limits (line-local, not a parser): a line that closes a multi-line template string, and
+ * computed access such as it["skip"](, are not recognised.
+ */
+export function codeOf(line: string): string {
+	let code = stripStrings(line).replace(/\/\*.*?\*\//g, " ");
+	const close = code.lastIndexOf("*/");
+	if (close !== -1) code = code.slice(close + 2);
 	const t = code.trimStart();
-	if (t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")) return true;
-	return t.startsWith("#") && !t.startsWith("#[");
+	const openedByLine = !line.trimStart().startsWith("*/");
+	if (t.startsWith("//") || t.startsWith("/*")) return "";
+	if (openedByLine && t.startsWith("*")) return "";
+	if (t.startsWith("#") && !t.startsWith("#[")) return "";
+	return code.replace(/\s+\(/g, "(");
 }
 
-/** Count skip or focus markers in one source line, ignoring strings and comment lines. */
+/** Count skip or focus markers in one source line, ignoring strings and comments. */
 export function countMarkers(line: string): number {
-	if (isCommentLine(line)) return 0;
-	const code = stripStrings(line);
+	const code = codeOf(line);
 	let count = 0;
 	for (const marker of SKIP_MARKERS) {
 		let from = 0;

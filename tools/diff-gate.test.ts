@@ -165,3 +165,12 @@ test("a --base that looks like a git option is refused and writes nothing", () =
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test("review evasions are counted: space before paren, leading block comment, comment close, skipIf", () => {
+	expect(countMarkers('it.skip ("x", () => {});')).toBe(1);
+	expect(countMarkers('/* note */ it.skip("x", () => {});')).toBe(1);
+	expect(countMarkers('*/ it.only("x", () => {});')).toBe(1);
+	expect(countMarkers("test.skipIf(true)(\"x\", () => {});")).toBe(1);
+	expect(countMarkers('/* it.skip("x") */')).toBe(0);
+	expect(countMarkers(" * it.only( in a doc comment")).toBe(0);
+});
