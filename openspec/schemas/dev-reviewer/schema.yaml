@@ -144,7 +144,9 @@ apply:
          `In-memory`, stop and ask the operator to re-enter through `/opsx-loop`; do not
          guess a session path or select the newest file.
       4. Only VERDICT: PASS (no P0/P1) completes the task; the developer ticks it [x].
-      5. On BLOCK, hand findings back to the developer and repeat.
+      5. On BLOCK, hand findings back to the developer and repeat, unless record-verdict
+         reports parked (exit 3, the OPSX_MAX_BLOCK_ROUNDS cap, default 3): then stop and
+         report the task to the operator instead of re-dispatching.
     After the last task: delegate the docs artifact to the `tech-writer` subagent, run
     `/opsx-retro <change>` to ratchet recurring findings, then close out with
     `just archive-change <change>`. Work tasks sequentially.
