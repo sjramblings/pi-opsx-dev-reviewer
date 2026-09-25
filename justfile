@@ -5,3 +5,6 @@ default:
     @just --list
 
 import "justfile.opsx"
+# >>> structurizr (managed by install.sh) >>>
+import "justfile.structurizr"
+# <<< structurizr (managed by install.sh) <<<

@@ -1,4 +1,4 @@
-# trust-and-goals — spec
+# trust-and-goals—spec
 
 ## ADDED Requirements
 

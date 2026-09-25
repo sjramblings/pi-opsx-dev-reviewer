@@ -1,13 +1,40 @@
 import { test, expect } from "bun:test";
 import { parseEvents, aggregateBlocked, findRetries, render } from "./assess-tool-events.ts";
 
-function ev(guard: string, tool: string, reason = "r", target = "t"): string {
-	return JSON.stringify({ ts: "2026-01-01", agent: "main", guard, tool, reason, target });
+function ev(
+	guard: string,
+	tool: string,
+	reason = "r",
+	target = "t",
+	eventKind?: "runtime" | "synthetic-test",
+): string {
+	return JSON.stringify({ ts: "2026-01-01", eventKind, agent: "main", guard, tool, reason, target });
 }
 
-test("parseEvents tolerates blank/malformed lines", () => {
-	const e = parseEvents(ev("force-delegate", "bash") + "\n\nnot json\n" + ev("branch-guard", "bash"));
-	expect(e.length).toBe(2);
+test("parseEvents tolerates blank, malformed, and invalid-shape lines", () => {
+	const text = [
+		ev("force-delegate", "bash"),
+		"",
+		"not json",
+		JSON.stringify({ guard: 42, tool: "bash" }),
+		JSON.stringify({ guard: "unknown", tool: "bash", eventKind: "other" }),
+		ev("branch-guard", "bash"),
+	].join("\n");
+	const events = parseEvents(text);
+	expect(events).toHaveLength(2);
+	expect(events.every((event) => event.eventKind === "runtime")).toBe(true);
+});
+
+test("parseEvents excludes tagged synthetic tests by default and can include them explicitly", () => {
+	const text = [
+		ev("force-delegate", "bash", "runtime", "just deploy", "runtime"),
+		ev("architect-scope", "bash", "test", "rm -rf src", "synthetic-test"),
+	].join("\n");
+	expect(parseEvents(text).map((event) => event.guard)).toEqual(["force-delegate"]);
+	expect(parseEvents(text, { includeSynthetic: true }).map((event) => event.guard)).toEqual([
+		"force-delegate",
+		"architect-scope",
+	]);
 });
 
 test("aggregateBlocked groups by guard+tool and ranks by count", () => {

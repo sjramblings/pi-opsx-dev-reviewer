@@ -10,7 +10,7 @@ EVIDENCE:
 - build: `bun build --no-bundle` clean
 - guard: `just check-extensions` clean (no regex literals/backticks/apostrophes)
 FINDINGS: none blocking. Prerequisite defect found + fixed first: both enforcer extensions
-  failed to load in pi due to regex literals + apostrophes (see SHAKEDOWN.md).
+  failed to load in pi due to regex literals + apostrophes (see shaKEDOWN.md).
 
 ## PROBE ATTESTATION -- selftest-probe
 

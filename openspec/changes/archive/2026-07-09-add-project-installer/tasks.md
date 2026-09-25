@@ -1,4 +1,4 @@
-# Tasks — add-project-installer
+# Tasks—add-project-installer
 
 > Built + verified directly this session (outside the pi delegation flow) at the operator's
 > request; verification evidence is in review-log.md.
@@ -8,8 +8,8 @@
 - [x] 1.1 Add `install.sh --here [path]` / `--all` mode that installs `.pi/extensions/`,
       `tools/`, the `dev-reviewer` schema + `openspec/config.yaml`, an `AGENTS.md` +
       `learnings/` scaffold, and a `justfile.opsx` import; non-destructive (`cp -n`).
-      probe: `./install.sh --here $(mktemp -d)` populates `.pi/extensions/`, `tools/`, `openspec/`, `learnings/`, `justfile` and exits 0.
-- [x] 1.2 Existing data files (`AGENTS.md`, `learnings/*`, `justfile`) are never clobbered.
+      probe: `./install.sh --here $(mktemp -d)` populates `.pi/extensions/`, `tools/`, `openspec/`, `learnings/`, justfile and exits 0.
+- [x] 1.2 Existing data files (`AGENTS.md`, `learnings/*`, justfile) are never clobbered.
       probe: re-running `--here` on a populated repo keeps the user's files and appends (not overwrites) the justfile import.
 
 ## 2. Load-breaker guard covers the installed layout

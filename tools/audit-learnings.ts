@@ -9,7 +9,7 @@
  * Runs via bun; not a pi extension, so normal TS is fine.
  */
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseFrontmatter } from "./select-learnings.ts";
 
@@ -19,10 +19,18 @@ const VALID_TYPE = new Set(["bug-class", "review-rule", "research-note", "decisi
 const REQUIRED = ["schema_version", "id", "type", "scope", "status", "summary", "created"];
 
 function changeResolves(change: string): boolean {
-	if (!change) return false;
-	return (
-		existsSync(join("openspec", "changes", change)) ||
-		existsSync(join("openspec", "changes", "archive", change))
+	if (!/^[a-z0-9][a-z0-9-]*$/.test(change)) return false;
+	const changesDir = join("openspec", "changes");
+	const archiveDir = join(changesDir, "archive");
+	const isDirectory = (path: string): boolean => existsSync(path) && statSync(path).isDirectory();
+	if (isDirectory(join(changesDir, change)) || isDirectory(join(archiveDir, change))) return true;
+	if (!isDirectory(archiveDir)) return false;
+
+	return readdirSync(archiveDir, { withFileTypes: true }).some(
+		(entry) =>
+			entry.isDirectory() &&
+			/^\d{4}-\d{2}-\d{2}-/.test(entry.name) &&
+			entry.name.slice("YYYY-MM-DD-".length) === change,
 	);
 }
 
@@ -59,6 +67,8 @@ for (const name of readdirSync(DIR)) {
 	const commit = String(source.commit ?? "");
 	if (String(fm.status) === "active") {
 		if (!commit) fail(name, "active learning has no source.commit (immutable provenance)");
+		else if (!/^[0-9a-f]{7,40}$/.test(commit))
+			fail(name, "active learning source.commit is not a 7-40 character hexadecimal sha: " + commit);
 		if (!changeResolves(change))
 			fail(name, "active learning source.change does not resolve to a change folder: " + change);
 	}

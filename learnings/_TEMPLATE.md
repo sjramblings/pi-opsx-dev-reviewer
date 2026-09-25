@@ -6,10 +6,10 @@ scope: ["path/glob/**"]    # one or more forward-slash globs; ** spans segments,
 tags: [tag-a, tag-b]
 severity: medium           # high | medium | low
 status: draft              # draft | active | retired | superseded  (only active is injected)
-summary: One-sentence imperative rule — this is what gets shown at BRIEF.
+summary: One-sentence imperative rule—this is what gets shown at BRIEF.
 source:
-  change: <change-folder-name>   # the OpenSpec change this was distilled from
-  commit: <short-sha>            # immutable pointer — a SHA, never a line number
+  change: <change-folder-name>   # the openspec change this was distilled from
+  commit: <short-sha>            # immutable pointer—a sha, never a line number
 created: 2026-01-01
 supersedes: null           # id of a learning this replaces, or null
 ---
@@ -18,7 +18,7 @@ supersedes: null           # id of a learning this replaces, or null
 
 ## Rule
 
-The rule as an imperative sentence — what the developer must do or must not do.
+The rule as an imperative sentence—what the developer must do or must not do.
 
 ## Why
 
@@ -26,7 +26,7 @@ The failure this prevents, and where it was caught (review-log entry / probe).
 
 ## Refutation (the hard-to-vary core)
 
-The epistemic record — what we believed, what broke it, what survives. This is what makes an
+The epistemic record—what we believed, what broke it, what survives. This is what makes an
 accumulated learning compound rather than pile up (a flat rule says the "what"; this says the
 "why it is true"). Keep all four lines; a learning without a refutation is an assumption.
 

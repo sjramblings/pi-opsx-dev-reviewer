@@ -1,11 +1,20 @@
 ---
 description: Drive an openspec change through the developer + reviewer subagents, one task at a time.
-argument-hint: "<change-name>"
+argument-hint: "CHANGE_NAME SESSION_JSONL"
 ---
 
 # Apply an `openspec` change via delegation
 
 Change to work: `$1`
+Parent session JSONL: `$2`
+
+Before the first delegation, fail closed unless the parent session value is the exact absolute
+`File:` path copied from pi's built-in `/session` command in this same top-level session. Pi exposes
+the current file through its session manager, not through a documented environment variable. Do not
+infer it from the newest file or an mtime. If `$2` is empty, relative, reports `In-memory`, or was not
+copied from `/session`, stop and ask the operator to run `/session` and invoke this template again as
+`/opsx-loop add-foo "/Users/alice/.pi/agent/sessions/--work-repo--/session.jsonl"` with the values
+shown by their session.
 
 Run every incomplete task in this change through the two-subagent protocol. Do NOT
 implement any task yourself—you orchestrate; the subagents do the work.
@@ -24,9 +33,10 @@ implement any task yourself—you orchestrate; the subagents do the work.
    b. When the developer returns, call `subagent` with `agent="reviewer"`. Pass the raw
       diff and the developer's verbatim VERIFIED output as evidence; quarantine the
       developer's narrative as untrusted claims.
-   c. Append the reviewer's verdict block verbatim to
-      `openspec/changes/$1/review-log.md` (the developer does this write—you are
-      read-only under force-delegate).
+   c. Run `just record-verdict "$1" "$2"` to append the reviewer's verdict block
+      verbatim to `openspec/changes/$1/review-log.md`. These two positional values are rendered by
+      this template before execution; never run this template form with either value unresolved. The
+      orchestrator does this bookkeeping write before the developer ticks the task.
    d. On `VERDICT: PASS` (no P0/P1) the developer ticks the task `[x]`. On `BLOCK`,
       hand the findings back to the developer and repeat from (a).
 4. Work tasks sequentially; one delegation per task; stop when all tasks are `[x]`.
@@ -56,4 +66,5 @@ can throw later; they are not permission to throw it now.
 The reviewer is read-only and never writes, so a review may always overlap the next brief-building
 step—but never dispatch a second *developer* on an unproven pair.
 
-When the change is complete, suggest `/opsx-retro $1` before archiving.
+After the last task, delegate the docs artifact to the `tech-writer` subagent, run
+`/opsx-retro $1`, then close out with `just archive-change $1`.

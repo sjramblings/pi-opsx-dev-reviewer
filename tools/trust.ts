@@ -19,8 +19,9 @@
  *   bun tools/trust.ts tier <skill>
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { atomicWriteFileSync, withLedgerLock } from "./lib/ledger-lock.ts";
 
 export const DEFAULT_FILE = "memory/trust.tsv";
 
@@ -76,9 +77,18 @@ function load(file: string): Map<string, Row> {
 	return parseRows(readFileSync(file, "utf8"));
 }
 
-function save(file: string, rows: Map<string, Row>): void {
+function logResult(
+	file: string,
+	skill: string,
+	result: "pass" | "fail",
+): { row: Row; demoted: boolean } {
 	mkdirSync(dirname(file), { recursive: true });
-	writeFileSync(file, serializeRows(rows) + "\n");
+	return withLedgerLock(file, () => {
+		const rows = load(file);
+		const applied = applyLog(rows, skill, result);
+		atomicWriteFileSync(file, serializeRows(rows) + "\n");
+		return applied;
+	});
 }
 
 export function render(rows: Map<string, Row>): string {
@@ -107,9 +117,7 @@ if (import.meta.main) {
 			process.stderr.write("usage: trust.ts log <skill> <pass|fail>\n");
 			process.exit(2);
 		}
-		const rows = load(file);
-		const { row, demoted } = applyLog(rows, a, b);
-		save(file, rows);
+		const { row, demoted } = logResult(file, a, b);
 		process.stdout.write(a + ": " + row.pass + "/" + row.runs + " -> " + tierOf(row.runs, row.pass) + "\n");
 		if (demoted) process.stderr.write("ALERT: " + a + " demoted to watch after " + row.runs + " runs\n");
 	} else if (cmd === "render") {

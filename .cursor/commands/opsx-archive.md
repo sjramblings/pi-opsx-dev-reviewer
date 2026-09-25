@@ -5,11 +5,13 @@ category: Workflow
 description: Archive a completed change in the experimental workflow
 ---
 
+# /opsx-archive
+
 Archive a completed change in the experimental workflow.
 
-**Input**: Optionally specify a change name after `/opsx:archive` (e.g., `/opsx:archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+**Input**: Optionally specify a change name after `/opsx:archive` (for example, `/opsx:archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
-**Steps**
+## Steps
 
 1. **If no change name provided, prompt for selection**
 
@@ -59,14 +61,15 @@ Archive a completed change in the experimental workflow.
    - Show a combined summary before prompting
 
    **Prompt options:**
-   - If changes needed: "Sync now (recommended)", "Archive without syncing"
-   - If already synced: "Archive now", "Sync anyway", "Cancel"
+   - If changes needed: "Sync now (recommended)," "Archive without syncing"
+   - If already synced: "Archive now," "Sync anyway," "Cancel"
 
-   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
+   If user chooses sync, use Task tool (subagent_type: "general-purpose," prompt: "Use Skill tool to invoke openspec-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
 
 5. **Perform the archive**
 
    Create an `archive` directory under `planningHome.changesDir` if it doesn't exist:
+
    ```bash
    mkdir -p "<planningHome.changesDir>/archive"
    ```
@@ -85,14 +88,14 @@ Archive a completed change in the experimental workflow.
 
    Show archive completion summary including:
    - Change name
-   - Schema that was used
+   - schema that was used
    - Archive location
    - Spec sync status (synced / sync skipped / no delta specs)
    - Note about any warnings (incomplete artifacts/tasks)
 
-**Output On Success**
+## Output On Success
 
-```
+```text
 ## Archive Complete
 
 **Change:** <change-name>
@@ -101,11 +104,9 @@ Archive a completed change in the experimental workflow.
 **Specs:** ✓ Synced to main specs
 
 All artifacts complete. All tasks complete.
-```
-
-**Output On Success (No Delta Specs)**
-
-```
+```text
+## Output On Success (No Delta Specs)
+```text
 ## Archive Complete
 
 **Change:** <change-name>
@@ -114,11 +115,9 @@ All artifacts complete. All tasks complete.
 **Specs:** No delta specs
 
 All artifacts complete. All tasks complete.
-```
-
-**Output On Success With Warnings**
-
-```
+```text
+## Output On Success With Warnings
+```text
 ## Archive Complete (with warnings)
 
 **Change:** <change-name>
@@ -126,17 +125,15 @@ All artifacts complete. All tasks complete.
 **Archived to:** the archive path derived from `planningHome.changesDir`/YYYY-MM-DD-<name>/
 **Specs:** Sync skipped (user chose to skip)
 
-**Warnings:**
+## Warnings:
 - Archived with 2 incomplete artifacts
 - Archived with 3 incomplete tasks
 - Delta spec sync was skipped (user chose to skip)
 
 Review the archive if this was not intentional.
-```
-
-**Output On Error (Archive Exists)**
-
-```
+```text
+## Output On Error (Archive Exists)
+```text
 ## Archive Failed
 
 **Change:** <change-name>
@@ -144,13 +141,12 @@ Review the archive if this was not intentional.
 
 Target archive directory already exists.
 
-**Options:**
+## Options:
 1. Rename the existing archive
 2. Delete the existing archive if it's a duplicate
 3. Wait until a different date to archive
-```
-
-**Guardrails**
+```text
+## Guardrails
 - Always prompt for change selection if not provided
 - Use artifact graph (openspec status --json) for completion checking
 - Don't block archive on warnings - just inform and confirm

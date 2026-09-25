@@ -1,12 +1,12 @@
-# Tasks — add-architecture-html
+# Tasks—add-architecture-html
 
-> Sequenced after `add-architecture-writer` merges — it modifies that change's promoted
+> Sequenced after `add-architecture-writer` merges—it modifies that change's promoted
 > `architecture-doc` and `arch-lint` specs. Zero new runtime dependencies.
 
-## 1. Shared theme
+## 1. `Sha`red theme
 
-- [x] 1.1 Extract the evolution-timeline design tokens into `tools/lib/theme.css` — the `:root`
-      token set, fonts, light and dark palettes — with no behavioural change.
+- [x] 1.1 Extract the evolution-timeline design tokens into `tools/lib/theme.css`—the `:root`
+      token set, fonts, light and dark palettes—with no behavioural change.
       files: `tools/lib/theme.css`
       probe: the token set matches the values currently in `evolution-timeline.template.html`; the file has both light and dark palettes.
       out-of-scope: changing any token value or the visual design.
@@ -31,15 +31,15 @@
 
 ## 3. The HTML template and render
 
-- [x] 3.1 Add `tools/architecture.template.html` — masthead with provenance and quality-goal
-      thesis, sticky section nav, stat tiles, styled HLD/LLD crosswalk, theme toggle — inlining
+- [x] 3.1 Add `tools/architecture.template.html`—masthead with provenance and quality-goal
+      thesis, sticky section nav, stat tiles, styled `HLD`/LLD crosswalk, theme toggle—inlining
       the shared theme, with a single `__MODEL__` injection point.
       files: `tools/architecture.template.html`
       probe: the template inlines `tools/lib/theme.css`, has exactly one `__MODEL__` point, and references no external host.
       out-of-scope: interactivity beyond theme toggle and section navigation.
       spec: `architecture-doc`, `shared-theme`
 
-- [x] 3.2 Complete `tools/architecture-html.ts` — read `docs/architecture/*.md`, build the
+- [x] 3.2 Complete `tools/architecture-html.ts`—read `docs/architecture/*.md`, build the
       section model, inject at `__MODEL__` (escape `</script`, fail loud if absent), write a
       deterministic self-contained `docs/architecture/index.html`.
       files: `tools/architecture-html.ts`
@@ -54,7 +54,7 @@
       Keep the three-state contract.
       files: `tools/arch-lint.ts`
       probe: a stale HTML fails and is named; a current HTML passes; a missing HTML with section files present fails; two runs on an unchanged current tree are stable.
-      out-of-scope: gating the HTML for content — the markdown is the content gate.
+      out-of-scope: gating the HTML for content—the markdown is the content gate.
       spec: `arch-lint`
 
 - [x] 4.2 Add a `just architecture-html` recipe and a render step to the architecture-writer
@@ -70,5 +70,5 @@
       `docs/architecture/index.html`, and pass `just arch-lint` clean including freshness.
       files: `install.sh`, `docs/architecture/index.html`
       probe: `install.sh --here` copies `architecture-html.ts`, `architecture.template.html`, and `tools/lib/theme.css`; `just arch-lint` reports clean with the freshness check green; the rendered page opens offline and matches the markdown.
-      out-of-scope: regenerating the markdown content — this renders the existing tree.
+      out-of-scope: regenerating the markdown content—this renders the existing tree.
       spec: `architecture-doc`, `arch-lint`, `shared-theme`

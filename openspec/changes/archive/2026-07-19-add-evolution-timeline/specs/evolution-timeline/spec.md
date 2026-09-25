@@ -1,12 +1,12 @@
-# evolution-timeline — delta
+# evolution-timeline—delta
 
 ## ADDED Requirements
 
-### Requirement: The tool extracts a faithful model from the OpenSpec repo
+### Requirement: The tool extracts a faithful model from the `openspec` repo
 
 The tool SHALL read `openspec/changes/` (active and `archive/`), `openspec/specs/`, and
 git history of a target repo, and produce a model whose counts equal the repo's actual
-content — no sampling, no truncation, no invented entries.
+content—no sampling, no truncation, no invented entries.
 
 #### Scenario: Every change folder is represented
 
@@ -57,8 +57,8 @@ a server or a model in the loop.
 
 ### Requirement: The hero thesis is a computed observation by default
 
-The tool SHALL compute the hero headline and subhead from the model — using mechanically
-checkable patterns such as all-added accretion, archive ratio, and open backlog — and
+The tool SHALL compute the hero headline and subhead from the model—using mechanically
+checkable patterns such as all-added accretion, archive ratio, and open backlog—and
 SHALL NOT emit praise or claims not derivable from the data.
 
 #### Scenario: An all-added repo is described as accretion

@@ -51,9 +51,14 @@ export default function (pi: any) {
 		if (event.toolName !== "bash") return undefined;
 		const reason = destructiveReason(event.input?.command);
 		if (!reason) return undefined;
+		const cleanupAlternative = reason.startsWith("recursive force delete")
+			? " For a verified temporary tree, prefer scoped non-force cleanup such as " +
+				"rm -r -- <verified-temp-path>."
+			: "";
 		const msg =
 			"developer-guard: blocked a destructive command (" + reason + "). Scope it " +
-			"narrowly or surface it to the human -- do not route around this guard.";
+			"narrowly or surface it to the human -- do not route around this guard." +
+			cleanupAlternative;
 		logBlocked("developer-guard", "bash", msg, event.input?.command);
 		return { block: true, reason: msg };
 	});

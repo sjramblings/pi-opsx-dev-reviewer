@@ -1,4 +1,4 @@
-# project-onboarding Specification
+# project-Onboarding Specification
 
 ## Purpose
 
@@ -18,7 +18,7 @@ piece into the target repo without clobbering existing data files.
 
 #### Scenario: Existing data files are never clobbered
 
-- **WHEN** the target repo already has an `AGENTS.md`, a `learnings/` entry, or a `justfile`
+- **WHEN** the target repo already has an `AGENTS.md`, a `learnings/` entry, or a justfile
 - **THEN** the installer keeps them (uses `cp -n`, appends the import rather than overwriting) and reports what it kept
 
 ### Requirement: The load-breaker guard scans the installed extension layout
@@ -46,7 +46,7 @@ and SHALL stay silent when nothing is pending.
 #### Scenario: All-ticked un-archived change triggers a retro reminder
 
 - **WHEN** a session starts in a repo where `openspec/changes/<c>/tasks.md` is all `[x]` and `<c>` is not under `changes/archive/`
-- **THEN** the reminder names `<c>` and directs the operator to run `/opsx-retro <c>` then `just archive-check <c>`
+- **THEN** the reminder names `<c>` and directs the operator to run `/opsx-retro <c>`, whose terminal close-out command is `just archive-change <c>`
 
 #### Scenario: Nothing pending stays quiet
 
@@ -65,4 +65,4 @@ and SHALL stay silent when nothing is pending.
 #### Scenario: Completed change points at the retro
 
 - **WHEN** `just next <c>` runs and every task in `<c>` is ticked
-- **THEN** it directs the operator to `/opsx-retro <c>`, then `just archive-check <c>`, then `openspec archive <c>`
+- **THEN** it directs the operator to `/opsx-retro <c>`, then `just archive-change <c>`

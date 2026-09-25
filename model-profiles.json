@@ -1,0 +1,52 @@
+{
+  "//": "Named model line-ups for the seven agents. `just models <profile>` writes project-local overrides to .pi/agents/ (gitignored; precedence user < project). `just models off` deletes them so the committed pins in agents/*.md apply again. Validate every id against `pi --list-models` before adding it here - the Cursor catalogue uses effort suffixes (-low/-medium/-high/-xhigh/-max) and a separate -thinking- infix, so ids are not interchangeable with the direct-provider spelling.",
+  "//tiers": "Native Cursor provider: 200K context for most models, 272K for gpt-5.5-max, 1M for gpt-5.5-1m; 64K max-out throughout. Direct anthropic reports 1M/128K. Always re-validate ids against `pi --list-models` after changing provider extension - the catalogue is provider-specific, not a Cursor-wide constant.",
+  "profiles": {
+    "cursor": {
+      "//": "Like-for-like billing swap onto the Cursor subscription via the NATIVE provider (@rahularya01/pi-cursor - in-process, no local proxy). Note its catalogue differs from the old proxy extension: it tops out at gpt-5.5-max and claude-4.6, so gpt-5.6-sol/terra and claude-opus-5 are not available here. Single-family, as the committed pins are.",
+      "solution-architect": "cursor/gpt-5.5-max",
+      "developer": "cursor/gpt-5.5-max",
+      "architecture-writer": "cursor/gpt-5.5-max",
+      "reviewer": "cursor/gpt-5.3-codex",
+      "spec-reviewer": "cursor/gpt-5.3-codex",
+      "tech-writer": "cursor/gpt-5.3-codex",
+      "evolution-narrator": "cursor/gpt-5.3-codex",
+      "_session": "cursor/gpt-5.5-max"
+    },
+    "cursor-xfam": {
+      "//": "Same subscription, judging roles on the Anthropic line so a PASS is independent confirmation rather than correlated blindness. Recommended. gpt-5.5-1m is available if a role needs 1M context.",
+      "solution-architect": "cursor/gpt-5.5-max",
+      "developer": "cursor/gpt-5.5-max",
+      "reviewer": "cursor/claude-4.6-opus-thinking",
+      "spec-reviewer": "cursor/claude-4.6-opus-thinking",
+      "architecture-writer": "cursor/claude-4.6-sonnet-thinking",
+      "tech-writer": "cursor/claude-4.6-sonnet-thinking",
+      "evolution-narrator": "cursor/claude-4.6-sonnet-thinking",
+      "_session": "cursor/gpt-5.5-max"
+    },
+    "anthropic": {
+      "//": "Direct Anthropic OAuth: 1M context vs Cursor 200K, which matters for whole-repo roles. Single-family, so the reviewer shares the blind spots of the developer. Requires a valid anthropic token - re-auth with /login if it has expired.",
+      "solution-architect": "anthropic/claude-opus-5",
+      "developer": "anthropic/claude-opus-5",
+      "architecture-writer": "anthropic/claude-opus-5",
+      "reviewer": "anthropic/claude-sonnet-5",
+      "spec-reviewer": "anthropic/claude-sonnet-5",
+      "tech-writer": "anthropic/claude-sonnet-5",
+      "evolution-narrator": "anthropic/claude-sonnet-5",
+      "_session": "anthropic/claude-opus-5"
+    },
+    "split": {
+      "//": "Cross-family AND context-maximised: implementers on the Cursor OpenAI line, judges on direct Anthropic at 1M context so a reviewer can hold a large change in one window. Needs both a Cursor subscription and a valid anthropic token.",
+      "solution-architect": "cursor/gpt-5.5-max",
+      "developer": "cursor/gpt-5.5-max",
+      "reviewer": "anthropic/claude-opus-5",
+      "spec-reviewer": "anthropic/claude-opus-5",
+      "architecture-writer": "anthropic/claude-opus-5",
+      "tech-writer": "anthropic/claude-sonnet-5",
+      "evolution-narrator": "anthropic/claude-sonnet-5",
+      "_session": "cursor/gpt-5.5-max"
+    }
+  },
+  "sessionDefault": "openai-codex/gpt-5.6-sol",
+  "//session": "_session sets pi's own session model (settings.json defaultProvider/defaultModel) alongside the subagent pins. Without it, `just models` only switches subagents and the orchestrator silently stays on whatever /model last set - which is exactly the trap this field exists to close. sessionDefault is what `off` restores."
+}

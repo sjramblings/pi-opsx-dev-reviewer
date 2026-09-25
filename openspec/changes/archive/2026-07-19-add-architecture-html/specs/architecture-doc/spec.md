@@ -1,12 +1,12 @@
-# architecture-doc — delta
+# architecture-doc—delta
 
 ## ADDED Requirements
 
 ### Requirement: The tree is rendered to a self-contained HTML page
 
 The architecture-writer SHALL render `docs/architecture/index.html` from the markdown tree.
-The page SHALL be self-contained — inline CSS and JavaScript, no external stylesheet, font, or
-script — and SHALL present the twelve arc42 sections, the provenance stamp, and the HLD/LLD
+The page SHALL be self-contained—inline CSS and JavaScript, no external stylesheet, font, or
+script—and SHALL present the twelve arc42 sections, the provenance stamp, and the `HLD`/LLD
 crosswalk.
 
 #### Scenario: The HTML is produced from the markdown

@@ -12,7 +12,7 @@
 
 ### New Capabilities
 
-<!-- Capabilities being introduced. Replace <name> with kebab-case identifier (e.g., user-auth, data-export, api-rate-limiting). Each creates specs/<name>/spec.md -->
+<!-- Capabilities being introduced. Replace <name> with kebab-case identifier (for example, user-auth, data-export, api-rate-limiting). Each creates specs/<name>/spec.md -->
 
 - `<name>`: <brief description of what this capability covers>
 

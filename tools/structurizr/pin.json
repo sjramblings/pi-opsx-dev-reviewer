@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "image": {
+    "repository": "structurizr/structurizr",
+    "tag": "2026.06.28-playwright",
+    "reference": "structurizr/structurizr:2026.06.28-playwright@sha256:9bdc861e8c94f77f5f73bde70bdee410a65b82cbe8d341d3919a9ebd0cb17f8c",
+    "indexDigest": "sha256:9bdc861e8c94f77f5f73bde70bdee410a65b82cbe8d341d3919a9ebd0cb17f8c",
+    "entrypoint": ["/usr/local/structurizr.sh"],
+    "platforms": {
+      "linux/amd64": "sha256:99119a0586c11e99db513915f1a5580088c6a07bcaded7d7d27f65fd2ee3c29e",
+      "linux/arm64": "sha256:b669b5dbf931f4e0bf900586f6b1b98a66b35192d123c17824da2ed1f850268e"
+    },
+    "allowedEnvironmentNames": [
+      "JAVA_HOME",
+      "LANG",
+      "LC_ALL",
+      "PATH",
+      "PLAYWRIGHT_BROWSERS_PATH",
+      "PORT"
+    ]
+  },
+  "upstream": {
+    "tag": "v2026.06.28",
+    "commit": "9ff16634c3b8574584262ae8545510bbb1d1b4bd",
+    "releaseUrl": "https://github.com/structurizr/structurizr/releases/tag/v2026.06.28",
+    "commitUrl": "https://github.com/structurizr/structurizr/commit/9ff16634c3b8574584262ae8545510bbb1d1b4bd",
+    "applicationVersion": "2026.06.28",
+    "librariesVersion": "6.2.2"
+  },
+  "interface": {
+    "platformProbeEntrypoint": "/usr/bin/uname",
+    "platformProbe": ["-s", "-m"],
+    "version": ["version"],
+    "validate": ["validate", "-w", "/workspace/workspace.dsl"],
+    "jsonExport": ["export", "-w", "/workspace/workspace.dsl", "-f", "json", "-o", "/output"],
+    "svgExport": [
+      "export",
+      "-w",
+      "/workspace/workspace.dsl",
+      "-f",
+      "svg",
+      "-o",
+      "/output",
+      "-mode",
+      "light",
+      "-animation",
+      "false"
+    ]
+  },
+  "xmlParser": {
+    "name": "saxes",
+    "version": "6.0.0",
+    "tarballUrl": "https://registry.npmjs.org/saxes/-/saxes-6.0.0.tgz",
+    "tarballSha256": "1cdf52fbbe1ccbd175c365d2b8e63f46e590e74aff23fa6a44a6ec51522e96db",
+    "npmIntegrity": "sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==",
+    "dependency": {
+      "name": "xmlchars",
+      "version": "2.2.0",
+      "tarballUrl": "https://registry.npmjs.org/xmlchars/-/xmlchars-2.2.0.tgz",
+      "tarballSha256": "bdf900298963e4bd95b76aa95e96d29f05687e6ae662d617061778267b576da8",
+      "npmIntegrity": "sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw=="
+    },
+    "files": {
+      "saxes/saxes.js": "d00e2ba27ed7d6ac961d03ff14d6b8c0eb5bf063ed2c996c22c6df06ac121423",
+      "saxes/package.json": "32052572b41c2a890ed0854798c48454cc5991dcaafe5fb1718a4253046acfd3",
+      "xmlchars/package.json": "a91c0b20003ff9399dde1de8c59681f1b6901c6fb1aac71780a3a876dc548583",
+      "xmlchars/LICENSE": "45d196313c2647d313cc65ca9b093d2d6974b64d35ee7346f2c60c9d518dff2c",
+      "xmlchars/xml/1.0/ed5.js": "ea350479ab6f6553c0c3395c30ec440fb39821f6902081939831ddf1b5e8fd0f",
+      "xmlchars/xml/1.1/ed2.js": "461d5c71cc6076dc16aebbfd2d3c506481df5a74f43631d82372a6ffdc239d69",
+      "xmlchars/xmlns/1.0/ed3.js": "ff14ffa3a2cdfdd1b6077c4a8443dc949f53d5bb56de5ed89d4dbc5d9fdf08f7"
+    },
+    "configuration": {
+      "xmlns": true,
+      "fragment": false,
+      "position": true,
+      "defaultXMLVersion": "1.0",
+      "forceXMLVersion": true,
+      "additionalNamespaces": false,
+      "resolvePrefix": false,
+      "doctype": "reject",
+      "entities": "xml-builtins-only"
+    }
+  },
+  "bun": {
+    "version": "1.3.14",
+    "setupAction": "oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76",
+    "releaseUrl": "https://github.com/oven-sh/bun/releases/tag/bun-v1.3.14",
+    "ciExecutableSha256": "9fd36f87e4b90b07632b987a2e4ec81ca15a62c81bf983190cea6d715be2ad74",
+    "archives": {
+      "darwin-aarch64": {
+        "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-aarch64.zip",
+        "sha256": "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
+      },
+      "darwin-x64": {
+        "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-x64.zip",
+        "sha256": "4183df3374623e5bab315c547cfa0974533cd457d86b73b639f7a87974cd6633"
+      },
+      "linux-aarch64": {
+        "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip",
+        "sha256": "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b"
+      },
+      "linux-x64": {
+        "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip",
+        "sha256": "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f"
+      }
+    }
+  },
+  "timeoutsSeconds": {
+    "bunVersion": 10,
+    "dockerInfo": 60,
+    "indexInspect": 60,
+    "pull": 900,
+    "imageInspect": 60,
+    "platformProbe": 60,
+    "version": 60,
+    "validate": 60,
+    "jsonExport": 120,
+    "svgExport": 300,
+    "terminateGrace": 10,
+    "forceRemove": 30
+  }
+}

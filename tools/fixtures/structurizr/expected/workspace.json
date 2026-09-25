@@ -1,0 +1,159 @@
+{
+  "configuration" : { },
+  "description" : "One self-contained model that relates one person directly to one component.",
+  "documentation" : { },
+  "id" : 0,
+  "model" : {
+    "people" : [ {
+      "description" : "Opens a rendered architecture view.",
+      "id" : "1",
+      "name" : "Reader",
+      "properties" : {
+        "structurizr.dsl.identifier" : "reader"
+      },
+      "relationships" : [ {
+        "description" : "Runs the pinned fixture through",
+        "destinationId" : "4",
+        "id" : "5",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Runs the pinned fixture through",
+        "destinationId" : "3",
+        "id" : "6",
+        "linkedRelationshipId" : "5",
+        "sourceId" : "1"
+      }, {
+        "description" : "Runs the pinned fixture through",
+        "destinationId" : "2",
+        "id" : "7",
+        "linkedRelationshipId" : "5",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "components" : [ {
+          "description" : "Executes the pinned command vectors.",
+          "documentation" : { },
+          "id" : "4",
+          "name" : "Pin Probe",
+          "properties" : {
+            "structurizr.dsl.identifier" : "kit.renderer.probe"
+          },
+          "tags" : "Element,Component"
+        } ],
+        "description" : "Runs the pinned consolidated image.",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "Renderer",
+        "properties" : {
+          "structurizr.dsl.identifier" : "kit.renderer"
+        },
+        "tags" : "Element,Container",
+        "technology" : "bun"
+      } ],
+      "description" : "The kit whose renderer pin is under test.",
+      "documentation" : { },
+      "id" : "2",
+      "name" : "Documentation Kit",
+      "properties" : {
+        "structurizr.dsl.identifier" : "kit"
+      },
+      "tags" : "Element,Software System"
+    } ]
+  },
+  "name" : "Pin Fixture",
+  "properties" : {
+    "structurizr.inspection.error" : "6",
+    "structurizr.dsl" : "d29ya3NwYWNlICJQaW4gRml4dHVyZSIgIk9uZSBzZWxmLWNvbnRhaW5lZCBtb2RlbCB0aGF0IHJlbGF0ZXMgb25lIHBlcnNvbiBkaXJlY3RseSB0byBvbmUgY29tcG9uZW50LiIgewoKICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwKCiAgICBtb2RlbCB7CiAgICAgICAgcmVhZGVyID0gcGVyc29uICJSZWFkZXIiICJPcGVucyBhIHJlbmRlcmVkIGFyY2hpdGVjdHVyZSB2aWV3LiIKCiAgICAgICAga2l0ID0gc29mdHdhcmVTeXN0ZW0gIkRvY3VtZW50YXRpb24gS2l0IiAiVGhlIGtpdCB3aG9zZSByZW5kZXJlciBwaW4gaXMgdW5kZXIgdGVzdC4iIHsKICAgICAgICAgICAgcmVuZGVyZXIgPSBjb250YWluZXIgIlJlbmRlcmVyIiAiUnVucyB0aGUgcGlubmVkIGNvbnNvbGlkYXRlZCBpbWFnZS4iICJidW4iIHsKICAgICAgICAgICAgICAgIHByb2JlID0gY29tcG9uZW50ICJQaW4gUHJvYmUiICJFeGVjdXRlcyB0aGUgcGlubmVkIGNvbW1hbmQgdmVjdG9ycy4iCiAgICAgICAgICAgIH0KICAgICAgICB9CgogICAgICAgIHJlYWRlciAtPiBraXQucmVuZGVyZXIucHJvYmUgIlJ1bnMgdGhlIHBpbm5lZCBmaXh0dXJlIHRocm91Z2giCiAgICB9CgogICAgdmlld3MgewogICAgICAgIHN5c3RlbUNvbnRleHQga2l0ICJjb250ZXh0IiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICBhdXRvbGF5b3V0IGxyCiAgICAgICAgfQoKICAgICAgICBjb250YWluZXIga2l0ICJjb250YWluZXIiIHsKICAgICAgICAgICAgaW5jbHVkZSAqCiAgICAgICAgICAgIGF1dG9sYXlvdXQgbHIKICAgICAgICB9CgogICAgICAgIGNvbXBvbmVudCBraXQucmVuZGVyZXIgImNvbXBvbmVudCIgewogICAgICAgICAgICBpbmNsdWRlICoKICAgICAgICAgICAgYXV0b2xheW91dCBscgogICAgICAgIH0KICAgIH0KfQ==",
+    "structurizr.inspection.info" : "0",
+    "structurizr.inspection.ignore" : "0",
+    "structurizr.inspection.warning" : "0"
+  },
+  "views" : {
+    "componentViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "containerId" : "3",
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "4",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "component",
+      "name" : "Component View: Documentation Kit - Renderer",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "5"
+      } ]
+    } ],
+    "configuration" : {
+      "styles" : { },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "3",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "container",
+      "name" : "Container View: Documentation Kit",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "6"
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "edgeSeparation" : 50,
+        "nodeSeparation" : 50,
+        "rankDirection" : "LeftRight",
+        "rankSeparation" : 100,
+        "vertices" : true
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 0,
+        "y" : 0
+      }, {
+        "id" : "2",
+        "x" : 0,
+        "y" : 0
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "context",
+      "name" : "System Context View: Documentation Kit",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "7"
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}

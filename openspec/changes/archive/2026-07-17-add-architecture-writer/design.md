@@ -1,4 +1,4 @@
-# Design — add-architecture-writer
+# Design—add-architecture-writer
 
 ## Context
 
@@ -11,14 +11,14 @@ The research base for this design, verified against primary sources:
 - **arc42** is the only candidate that is both a real heading structure and actively maintained.
   Its 12 sections are the skeleton.
 - **C4** populates arc42 sections 3 and 5 by an official mapping published in the C4 FAQ. Both
-  authors endorse the pairing. The Code level is excluded — Simon Brown's own guidance is "No,
+  authors endorse the pairing. The Code level is excluded—Simon Brown's own guidance is "No,
   particularly for long-lived documentation because most IDEs can generate this level of detail
   on demand."
-- **ISO/IEC/IEEE 42010:2022** cannot supply headings — it specifies no format or media. Clause 4
+- **ISO/IEC/IEEE 42010:2022** cannot supply headings—it specifies no format or media. Clause 4
   states that tailoring is "neither required nor permitted" for conformance claims. It is used
   here as an audit checklist, never as a structure and never as a claim.
 - **MADR 4.0.0** is the ADR format already in use at `docs/decisions/0001`.
-- **HLD/LLD** has no standards body and no canonical template. It is house convention, and its
+- **`HLD`/LLD** has no standards body and no canonical template. It is house convention, and its
   detail layer is exactly what Brown says not to hand-maintain. It is served by a crosswalk table,
   not by the native structure.
 
@@ -64,13 +64,13 @@ first, and keeps the quality chapter readable. Full-sweep stays available by fla
 
 **`anthropic/claude-opus-4-8` for the writer.** Whole-repo synthesis is long-context work, and it
 places the writer in a different model family from the `solution-architect` (gpt-5.5) whose design
-it describes — the same reasoning as `docs/decisions/0001-cross-family-reviewer.md`. The existing
+it describes—the same reasoning as `docs/decisions/0001-cross-family-reviewer.md`. The existing
 `reviewer` (gpt-5.4) then reviews the output, giving cross-family coverage in both directions.
 
 **Decision debt over invented rationale.** When the writer finds an architecturally significant
 decision in code with no matching ADR, it records the gap in section 11 rather than reconstructing
-why. This applies Hohpe's test — a document is architecture only if it carries decisions and their
-rationale — as a feedback loop into the harness instead of a silent fabrication.
+why. This applies Hohpe's test—a document is architecture only if it carries decisions and their
+rationale—as a feedback loop into the harness instead of a silent fabrication.
 
 ## Risks / Trade-offs
 

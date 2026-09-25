@@ -1,4 +1,4 @@
-# architecture-doc — delta
+# architecture-doc—delta
 
 ## ADDED Requirements
 
@@ -70,7 +70,7 @@ instantiated in the repo, and at least one consequence the system accepts by usi
 - **WHEN** a pattern is named with no consequence stated
 - **THEN** `just arch-lint` fails and the claim is not emitted
 
-### Requirement: The index carries provenance and an HLD/LLD crosswalk
+### Requirement: The index carries provenance and an `HLD`/LLD crosswalk
 
 `docs/architecture/README.md` SHALL record the commit the tree was generated from, the generation
 date, and the Well-Architected corpus tag and content hash used, and SHALL map the arc42 sections

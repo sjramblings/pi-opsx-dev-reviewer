@@ -2,6 +2,110 @@
 # that ran install.sh --here. Deliberately has NO 'default' recipe, so importing it
 # never collides with a host justfile's own default (which broke a real host justfile).
 
+# Create a sibling linked worktree, then provision only its gitignored guard state.
+worktree name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name={{quote(name)}}
+    repo_root=$(git rev-parse --show-toplevel)
+    repo=$(basename "$repo_root")
+    target=$(dirname "$repo_root")/"${repo}--${name}"
+    git -C "$repo_root" worktree add "$target" -b "session/$name"
+    "$repo_root/install.sh" --guards "$target"
+
+# Remove only the named sibling worktree after deleting its provisioned ignored state.
+worktree-rm name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name={{quote(name)}}
+    repo_root=$(git rev-parse --show-toplevel)
+    repo_root=$(cd "$repo_root" && pwd -P)
+    repo=$(basename "$repo_root")
+    target=$(dirname "$repo_root")/"${repo}--${name}"
+    [ ! -L "$target" ] || { echo "worktree-rm: target path must not be a symlink: $target" >&2; exit 1; }
+    [ -d "$target" ] || { echo "worktree-rm: target is not a directory: $target" >&2; exit 1; }
+    target=$(cd "$target" && pwd -P)
+
+    primary=""
+    registered=0
+    registered_branch=""
+    current_worktree=""
+    worktree_list=$(mktemp)
+    trap 'rm -f "$worktree_list"' EXIT
+    if ! git -C "$repo_root" worktree list --porcelain -z > "$worktree_list"; then
+        echo "worktree-rm: could not list registered worktrees for $repo_root" >&2
+        exit 1
+    fi
+    while IFS= read -r -d '' field; do
+        case "$field" in
+            "worktree "*)
+                current_worktree=${field#worktree }
+                [ -n "$primary" ] || primary=$current_worktree
+                if [ "$current_worktree" = "$target" ]; then registered=1; fi
+                ;;
+            "branch "*)
+                if [ "$current_worktree" = "$target" ]; then
+                    registered_branch=${field#branch }
+                fi
+                ;;
+        esac
+    done < "$worktree_list"
+
+    [ -n "$primary" ] || { echo "worktree-rm: git returned no primary worktree" >&2; exit 1; }
+    primary=$(cd "$primary" && pwd -P)
+    [ "$repo_root" = "$primary" ] || {
+        echo "worktree-rm: run this recipe from the primary checkout: $primary" >&2
+        exit 1
+    }
+    [ "$target" != "$primary" ] || { echo "worktree-rm: refusing to remove the primary checkout" >&2; exit 1; }
+    [ "$registered" -eq 1 ] || { echo "worktree-rm: target is not a registered worktree: $target" >&2; exit 1; }
+    [ "$registered_branch" = "refs/heads/session/$name" ] || {
+        echo "worktree-rm: target is not on refs/heads/session/$name: ${registered_branch:-detached}" >&2
+        exit 1
+    }
+    target_top=$(git -C "$target" rev-parse --show-toplevel)
+    target_top=$(cd "$target_top" && pwd -P)
+    [ "$target" = "$target_top" ] || { echo "worktree-rm: target is not a worktree root: $target" >&2; exit 1; }
+
+    [ -d "$primary/memory" ] || { echo "worktree-rm: primary memory is not a directory: $primary/memory" >&2; exit 1; }
+    primary_memory=$(cd "$primary/memory" && pwd -P)
+    memory_state=absent
+    if [ -L "$target/memory" ]; then
+        target_memory=$(cd "$target/memory" && pwd -P) || {
+            echo "worktree-rm: target memory symlink is broken: $target/memory" >&2
+            exit 1
+        }
+        [ "$target_memory" = "$primary_memory" ] || {
+            echo "worktree-rm: target memory symlink does not point to primary memory: $target/memory" >&2
+            exit 1
+        }
+        memory_state=symlink
+    elif [ -e "$target/memory" ]; then
+        echo "worktree-rm: target memory is not a symlink; refusing to remove it: $target/memory" >&2
+        exit 1
+    fi
+
+    pi_state=absent
+    if [ -L "$target/.pi" ]; then
+        pi_state=symlink
+    elif [ -d "$target/.pi" ]; then
+        pi_state=directory
+    elif [ -e "$target/.pi" ]; then
+        echo "worktree-rm: target .pi is not a directory; refusing to remove it: $target/.pi" >&2
+        exit 1
+    fi
+
+    if [ "$memory_state" = symlink ]; then
+        rm -- "$target/memory"
+    fi
+    if [ "$pi_state" = symlink ]; then
+        rm -- "$target/.pi"
+    elif [ "$pi_state" = directory ]; then
+        rm -rf -- "$target/.pi"
+    fi
+    git -C "$repo_root" worktree remove "$target"
+    git -C "$repo_root" worktree prune
+
 # Lint all Markdown. Skips any tool that isn't installed (prints a notice) so the
 # gate runs anywhere; `just docs-lint-setup` installs the full set.
 docs-lint:
@@ -20,8 +124,9 @@ docs-lint:
     }
     run markdownlint markdownlint-cli2 "**/*.md"
     run vale          vale .
-    run lychee        lychee --no-progress --cache '**/*.md'
+    run lychee        lychee --no-progress '**/*.md'
     run cspell        cspell "**/*.md" --no-progress
+    run docs-contracts bun tools/check-doc-contracts.ts
     if [ "$rc" -ne 0 ]; then
         echo "docs-lint: FAIL"
     elif [ "$skipped" -gt 0 ]; then
@@ -98,6 +203,36 @@ arch-lint:
     fi
     bun tools/arch-lint.ts "$tree" "$decisions"
 
+# Append the latest reviewer verdict from a pi session to the change ledger.
+record-verdict change session:
+    @bun tools/record-verdict.ts {{quote(change)}} {{quote(session)}}
+
+# Promote and archive a guarded change, then normalise only the main specs named by its deltas.
+archive-change change:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    change={{quote(change)}}
+    shopt -s nullglob
+    promoted_specs=()
+    for delta_spec in "openspec/changes/$change"/specs/*/spec.md; do
+        relative_spec=${delta_spec#"openspec/changes/$change/specs/"}
+        promoted_specs+=("openspec/specs/$relative_spec")
+    done
+    just archive-check "$change"
+    bun tools/promote-guard.ts "$change"
+    openspec archive "$change" -y
+    if [ "${#promoted_specs[@]}" -eq 0 ]; then
+        echo "archive-change: no promoted spec files to lint-normalise."
+        exit 0
+    fi
+    for promoted_spec in "${promoted_specs[@]}"; do
+        if [ ! -f "$promoted_spec" ]; then
+            echo "archive-change: promoted spec was not created: $promoted_spec" >&2
+            exit 1
+        fi
+    done
+    bunx --bun markdownlint-cli2@0.23.1 --no-globs --fix -- "${promoted_specs[@]}"
+
 # Hard presence gate before archiving a change. OpenSpec 1.4.1 does NOT block archive on
 # a missing review-report/docs artifact, so this check enforces it. Never skips; exits
 # non-zero if the review ledger is absent or empty. Run before `openspec archive`.
@@ -106,6 +241,12 @@ archive-check change:
     set -euo pipefail
     dir="openspec/changes/{{change}}"
     if [ ! -d "$dir" ]; then echo "archive-check: no change folder $dir" >&2; exit 1; fi
+    if ! command -v bun >/dev/null 2>&1; then
+        echo "archive-check: FAIL — bun is required for semantic documentation contracts." >&2
+        exit 1
+    fi
+    echo "── documentation contracts ──"
+    bun tools/check-doc-contracts.ts
     log="$dir/review-log.md"
     # A real ledger has at least one recorded verdict, not just the template comment.
     if [ ! -f "$log" ] || ! grep -qE '^VERDICT:' "$log"; then
@@ -292,9 +433,35 @@ check-extensions:
     # Kit-dev layout (extensions/) AND installed-project layout (.pi/extensions/), plus the
     # shared lib/ imported by the guards (a load-breaker there breaks every guard too).
     files=(extensions/*/index.ts extensions/lib/*.ts .pi/extensions/*/index.ts .pi/extensions/lib/*.ts)
+    global_canary="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/extensions/worktree-canary/index.ts"
+    if [ -f "$global_canary" ]; then
+        files+=("$global_canary")
+        echo "check-extensions: included installed global canary: $global_canary"
+    elif [ -e "$global_canary" ] || [ -L "$global_canary" ]; then
+        echo "check-extensions: installed global canary is not a regular file: $global_canary" >&2
+        exit 1
+    else
+        echo "check-extensions: installed global canary absent -- installed copy not checked: $global_canary"
+    fi
     if [ ${#files[@]} -eq 0 ]; then echo "check-extensions: no extensions found (nothing to check)"; exit 0; fi
     rc=0
     for f in "${files[@]}"; do
+        if ! double_quote_count=$(LC_ALL=C tr -cd '"' < "$f" | wc -c | tr -d '[:space:]'); then
+            echo "LOAD-BREAKER audit error: could not count double quotes in $f" >&2
+            rc=1
+            continue
+        fi
+        case "$double_quote_count" in
+            ""|*[!0-9]*)
+                echo "LOAD-BREAKER audit error: invalid double quote count for $f: $double_quote_count" >&2
+                rc=1
+                continue
+                ;;
+        esac
+        if [ $((double_quote_count % 2)) -ne 0 ]; then
+            echo "LOAD-BREAKER: unpaired double quote in $f (odd count: $double_quote_count)" >&2
+            rc=1
+        fi
         if grep -q '`' "$f"; then echo "LOAD-BREAKER: raw backtick in $f" >&2; rc=1; fi
         if grep -q "'" "$f"; then echo "LOAD-BREAKER: apostrophe in $f (use none; even in comments/strings)" >&2; rc=1; fi
         # Regex literals only: assignment to /re/ (needs a space: `= /`) or a regex method
@@ -305,7 +472,81 @@ check-extensions:
             rc=1
         fi
     done
-    if [ "$rc" -eq 0 ]; then echo "check-extensions: clean -- no pi load-breakers"; else echo "check-extensions: FAIL" >&2; fi
+
+    extract_recipe() {
+        local header="$1"
+        awk -v header="$header" '
+            $0 == header { found=1; next }
+            found && /^[^[:space:]]/ { exit }
+            found { print }
+        ' justfile.opsx
+    }
+    assert_thin_recipe() {
+        local recipe="$1" header="$2" expected="$3" body construct
+        body=$(extract_recipe "$header")
+        if [ -z "$body" ]; then
+            echo "recipe-thinness: $recipe disallowed construct missing recipe" >&2
+            rc=1
+            return
+        fi
+        for construct in rm mv cp mkdir; do
+            if printf '%s\n' "$body" | grep -Eq "(^|[[:space:];|&])$construct([[:space:]]|$)"; then
+                echo "recipe-thinness: $recipe disallowed construct $construct" >&2
+                rc=1
+                return
+            fi
+        done
+        if printf '%s\n' "$body" | grep -Eq '(^|[[:space:];|&])sed[[:space:]]+-i([[:space:]]|$)'; then
+            echo "recipe-thinness: $recipe disallowed construct sed -i" >&2
+            rc=1
+            return
+        fi
+        if printf '%s\n' "$body" | sed 's/>&2//g' | grep -Eq '[<>]'; then
+            echo "recipe-thinness: $recipe disallowed construct redirection" >&2
+            rc=1
+            return
+        fi
+        if [ "$body" != "$expected" ]; then
+            echo "recipe-thinness: $recipe disallowed construct uncontracted command or recipe shape" >&2
+            rc=1
+            return
+        fi
+        echo "recipe-thinness: $recipe clean -- contracted wrapper only"
+    }
+    expected_record=$(cat <<'EXPECTED_RECORD'
+        @bun tools/record-verdict.ts {{ '{{quote(change)}}' }} {{ '{{quote(session)}}' }}
+    EXPECTED_RECORD
+    )
+    expected_archive=$(cat <<'EXPECTED_ARCHIVE'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        change={{ '{{quote(change)}}' }}
+        shopt -s nullglob
+        promoted_specs=()
+        for delta_spec in "openspec/changes/$change"/specs/*/spec.md; do
+            relative_spec=${delta_spec#"openspec/changes/$change/specs/"}
+            promoted_specs+=("openspec/specs/$relative_spec")
+        done
+        just archive-check "$change"
+        bun tools/promote-guard.ts "$change"
+        openspec archive "$change" -y
+        if [ "${#promoted_specs[@]}" -eq 0 ]; then
+            echo "archive-change: no promoted spec files to lint-normalise."
+            exit 0
+        fi
+        for promoted_spec in "${promoted_specs[@]}"; do
+            if [ ! -f "$promoted_spec" ]; then
+                echo "archive-change: promoted spec was not created: $promoted_spec" >&2
+                exit 1
+            fi
+        done
+        bunx --bun markdownlint-cli2@0.23.1 --no-globs --fix -- "${promoted_specs[@]}"
+    EXPECTED_ARCHIVE
+    )
+    assert_thin_recipe "record-verdict" "record-verdict change session:" "$expected_record"
+    assert_thin_recipe "archive-change" "archive-change change:" "$expected_archive"
+
+    if [ "$rc" -eq 0 ]; then echo "check-extensions: clean -- no pi load-breakers; recipe-thinness assertions clean"; else echo "check-extensions: FAIL" >&2; fi
     exit "$rc"
 
 # Install the docs-lint toolchain. Homebrew for vale + lychee, npm for the JS tools.
@@ -447,9 +688,9 @@ next change:
     if [ "$total" -eq 0 ]; then
         echo "next: no tasks yet — write proposal → specs → tasks (each task needs a probe: line)."
     elif [ "$done" -lt "$total" ]; then
-        echo "next: run  /opsx-loop {{change}}  to implement the remaining $((total - done)) task(s)."
+        echo "next: run  /session , copy its absolute File: path, then run  /opsx-loop {{change}} \"/absolute/path/to/session.jsonl\"  to implement the remaining $((total - done)) task(s)."
     else
-        echo "next: all tasks done — run  /opsx-retro {{change}} , then  just archive-check {{change}} , then  openspec archive {{change}} ."
+        echo "next: all tasks done — run  /opsx-retro {{change}} , then  just archive-change {{change}} ."
     fi
 
 # Per-skill autonomy trust ledger. `just trust` renders the table (runs/pass-rate/tier);
@@ -466,15 +707,14 @@ trust-log skill result:
 goals:
     @bun tools/verify-goals.ts
 
-# Roll up a pi session's cost per model + grand total (pi --export shows no total). Reports
-# subagent calls, whose cost is NOT persisted (subagents run --no-session; TUI-only). Pass
-# --html to emit a cost-summary fragment to sit beside the exported session HTML.
+# Roll up accepted session cost, including valid persisted parent subagent ToolResult usage; --html emits an export-side summary.
 session-cost session *flags:
     @bun tools/session-cost.ts {{session}} {{flags}}
 
 # Mine the guards' blocked-action ledger (memory/tool-events.jsonl) — and, with --session
-# <s.jsonl>, retry loops in a pi session — into candidate learnings for /opsx-retro. Derives
-# the recurring signal; does not re-log every call (pi's session jsonl already has those).
+# <s.jsonl>, retry loops in a pi session — into candidate learnings for /opsx-retro. Tagged
+# synthetic guard-test events are excluded by default; --include-synthetic is an explicit probe.
+# Derives the recurring signal; does not re-log every call (pi's session jsonl already has those).
 tool-events *flags:
     @bun tools/assess-tool-events.ts {{flags}}
 
@@ -485,3 +725,16 @@ tool-events *flags:
 # then: bun tools/evolution-timeline.ts <repo> --thesis thesis.json
 evolution-timeline repo=".":
     @bun tools/evolution-timeline.ts {{repo}}
+
+# Flip the agent line-up between named model profiles in model-profiles.json. Writes
+# project-local overrides to .pi/agents/ (gitignored, and preferred over the global agents
+# dir); `just models off` deletes them so the committed pins in agents/*.md apply again.
+# The committed pins are never edited.
+models profile="status":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    case "{{profile}}" in
+      status) bun tools/model-profile.ts status ;;
+      off)    bun tools/model-profile.ts off ;;
+      *)      bun tools/model-profile.ts apply "{{profile}}" ;;
+    esac

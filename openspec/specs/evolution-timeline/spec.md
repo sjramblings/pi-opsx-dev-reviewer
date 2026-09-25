@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Render how an OpenSpec architecture grew over time as a self-contained timeline, derived from
-the change log — the sequence of changes and the requirements each one declared. It is a view
+Render how an `openspec` architecture grew over time as a self-contained timeline, derived from
+the change log—the sequence of changes and the requirements each one declared. It is a view
 of the change history, not an inventory of the current living specs.
 
 ## Requirements
@@ -11,7 +11,7 @@ of the change history, not an inventory of the current living specs.
 ### Requirement: The tool extracts a faithful model of the change log
 
 The tool SHALL read `openspec/changes/` (active and `archive/`) and git history of a target
-repo, and produce a model whose counts equal the declared content of the change log — every
+repo, and produce a model whose counts equal the declared content of the change log—every
 change folder and every requirement each change declared, with no sampling, no truncation, and
 no invented entries. The model reflects what the changes declared, which is the timeline's
 subject; it is not a snapshot of `openspec/specs/`, and canonical requirements that were never
@@ -66,8 +66,8 @@ a server or a model in the loop.
 
 ### Requirement: The hero thesis is a computed observation by default
 
-The tool SHALL compute the hero headline and subhead from the model — using mechanically
-checkable patterns such as all-added accretion, archive ratio, and open backlog — and
+The tool SHALL compute the hero headline and subhead from the model—using mechanically
+checkable patterns such as all-added accretion, archive ratio, and open backlog—and
 SHALL NOT emit praise or claims not derivable from the data.
 
 #### Scenario: An all-added repo is described as accretion

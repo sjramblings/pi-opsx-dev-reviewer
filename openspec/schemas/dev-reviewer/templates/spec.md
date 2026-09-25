@@ -1,4 +1,4 @@
-# <!-- capability name --> — spec delta
+# <!-- capability name -->—spec delta
 
 ## ADDED Requirements
 

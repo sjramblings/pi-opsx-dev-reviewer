@@ -1,0 +1,1908 @@
+TASK 5.1 LIVE SHAKEDOWN — add-worktree-isolation
+UTC_START=20260802T201809Z
+SOURCE_ROOT=~/GitHub/projects/pi-opsx-dev-reviewer
+DISPOSABLE_FIXTURE=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture
+FIXTURE_POLICY=current working-tree deliverables copied without .git, .pi, memory, node_modules, build, or ephemeral cache files; fixture initialized and committed under /tmp; source repo was not staged, committed, reset, or cleaned
+PI_RUNTIME=~/.nvm/versions/node/v24.16.0/bin/pi
+PI_CODING_AGENT_DIR=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent
+
+$ test -x ~/.nvm/versions/node/v24.16.0/bin/pi && ~/.nvm/versions/node/v24.16.0/bin/pi --version
+0.83.0
+[exit 0]
+
+$ shasum -a 256 /tmp/pi-opsx-5.1-rpc-probe.py && nl -ba /tmp/pi-opsx-5.1-rpc-probe.py
+79c41a1faad3f9ae354e48ab2d11b6bd18f40976294077c4f2708d5becba771f  /tmp/pi-opsx-5.1-rpc-probe.py
+     1	#!/usr/bin/env python3
+     2	import concurrent.futures
+     3	import json
+     4	import os
+     5	import pathlib
+     6	import queue
+     7	import re
+     8	import subprocess
+     9	import sys
+    10	import threading
+    11	import time
+    12	
+    13	REAL_PI = "~/.nvm/versions/node/v24.16.0/bin/pi"
+    14	TIMEOUT_SECONDS = 30
+    15	
+    16	
+    17	def top_level_env(pi_dir: str) -> dict[str, str]:
+    18	    env = os.environ.copy()
+    19	    for key in ("PI_SUBAGENT_DEPTH", "PI_SUBAGENT_STACK", "__FORCE_DELEGATE_LOADED"):
+    20	        env.pop(key, None)
+    21	    env.update({
+    22	        "PI_CODING_AGENT_DIR": pi_dir,
+    23	        "PI_OFFLINE": "1",
+    24	        "PI_SKIP_VERSION_CHECK": "1",
+    25	    })
+    26	    return env
+    27	
+    28	
+    29	def rpc_argv(session_dir: str, label: str) -> list[str]:
+    30	    return [
+    31	        REAL_PI,
+    32	        "--mode", "rpc",
+    33	        "--approve",
+    34	        "--session-dir", session_dir,
+    35	        "--name", label,
+    36	        "--provider", "openai-codex",
+    37	        "--model", "gpt-5.6-sol",
+    38	        "--thinking", "off",
+    39	        "--no-skills",
+    40	        "--no-prompt-templates",
+    41	        "--offline",
+    42	    ]
+    43	
+    44	
+    45	def parse_jsonl(stdout: str, label: str) -> list[dict[str, object]]:
+    46	    records: list[dict[str, object]] = []
+    47	    for index, line in enumerate(stdout.splitlines(), start=1):
+    48	        try:
+    49	            value = json.loads(line)
+    50	        except json.JSONDecodeError as error:
+    51	            raise AssertionError(f"{label}: stdout line {index} is not JSON: {line!r}") from error
+    52	        if not isinstance(value, dict) or not isinstance(value.get("type"), str):
+    53	            raise AssertionError(f"{label}: stdout line {index} has invalid RPC shape: {value!r}")
+    54	        records.append(value)
+    55	    return records
+    56	
+    57	
+    58	def response(records: list[dict[str, object]], request_id: str, command: str) -> dict[str, object]:
+    59	    matches = [record for record in records if record.get("type") == "response" and record.get("id") == request_id]
+    60	    if len(matches) != 1:
+    61	        raise AssertionError(f"{request_id}: expected one response, found {len(matches)}")
+    62	    value = matches[0]
+    63	    if value.get("command") != command or value.get("success") is not True:
+    64	        raise AssertionError(f"{request_id}: invalid response: {value!r}")
+    65	    return value
+    66	
+    67	
+    68	def run_guarded(worktree: str, pi_dir: str, session_root: str, label: str, change: str) -> str:
+    69	    session_dir = str(pathlib.Path(session_root, label))
+    70	    pathlib.Path(session_dir).mkdir(parents=True, exist_ok=True)
+    71	    observer = (
+    72	        "printf 'OBSERVER label=" + label + " change=" + change +
+    73	        " cwd=%s pi_pid=%s handshake=%s\\n' \"$PWD\" \"$PPID\" \"$__FORCE_DELEGATE_LOADED\"; "
+    74	        "openspec status --change " + change + " --json"
+    75	    )
+    76	    payload = "\n".join([
+    77	        json.dumps({"id": "state-" + label, "type": "get_state"}),
+    78	        json.dumps({"id": "observer-" + label, "type": "bash", "command": observer}),
+    79	        "",
+    80	    ])
+    81	    argv = rpc_argv(session_dir, label)
+    82	    proc = subprocess.Popen(
+    83	        argv,
+    84	        cwd=worktree,
+    85	        env=top_level_env(pi_dir),
+    86	        stdin=subprocess.PIPE,
+    87	        stdout=subprocess.PIPE,
+    88	        stderr=subprocess.PIPE,
+    89	        text=True,
+    90	    )
+    91	    if proc.stdin is None or proc.stdout is None or proc.stderr is None:
+    92	        proc.kill()
+    93	        raise AssertionError(f"{label}: RPC pipes were not created")
+    94	    stdout_lines: list[str] = []
+    95	    stderr_lines: list[str] = []
+    96	    stdout_queue: queue.Queue[str] = queue.Queue()
+    97	
+    98	    def read_stdout() -> None:
+    99	        assert proc.stdout is not None
+   100	        for line in proc.stdout:
+   101	            stdout_lines.append(line)
+   102	            stdout_queue.put(line)
+   103	
+   104	    def read_stderr() -> None:
+   105	        assert proc.stderr is not None
+   106	        stderr_lines.extend(proc.stderr.readlines())
+   107	
+   108	    stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+   109	    stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+   110	    stdout_thread.start()
+   111	    stderr_thread.start()
+   112	    try:
+   113	        proc.stdin.write(payload)
+   114	        proc.stdin.flush()
+   115	        expected_ids = {"state-" + label, "observer-" + label}
+   116	        seen_ids: set[str] = set()
+   117	        deadline = time.monotonic() + TIMEOUT_SECONDS
+   118	        while seen_ids != expected_ids:
+   119	            remaining = deadline - time.monotonic()
+   120	            if remaining <= 0:
+   121	                raise TimeoutError
+   122	            line = stdout_queue.get(timeout=remaining)
+   123	            value = json.loads(line)
+   124	            if isinstance(value, dict) and value.get("type") == "response" and isinstance(value.get("id"), str):
+   125	                seen_ids.add(value["id"])
+   126	        proc.stdin.close()
+   127	        proc.wait(timeout=TIMEOUT_SECONDS)
+   128	        stdout_thread.join(timeout=2)
+   129	        stderr_thread.join(timeout=2)
+   130	    except (TimeoutError, queue.Empty, subprocess.TimeoutExpired) as error:
+   131	        proc.kill()
+   132	        proc.wait()
+   133	        raise AssertionError(f"{label}: RPC timed out after {TIMEOUT_SECONDS}s") from error
+   134	    stdout = "".join(stdout_lines)
+   135	    stderr = "".join(stderr_lines)
+   136	
+   137	    report = [
+   138	        "RPC_COMMAND=" + " ".join(argv),
+   139	        "RPC_CWD=" + worktree,
+   140	        "RPC_TOP_LEVEL_ENV=PI_SUBAGENT_DEPTH unset; PI_SUBAGENT_STACK unset; __FORCE_DELEGATE_LOADED unset",
+   141	        "RPC_PID=" + str(proc.pid),
+   142	        "RPC_EXIT=" + str(proc.returncode),
+   143	        "--- RPC STDOUT ---",
+   144	        stdout.rstrip("\n"),
+   145	        "--- RPC STDERR ---",
+   146	        stderr.rstrip("\n"),
+   147	    ]
+   148	
+   149	    if proc.returncode != 0:
+   150	        raise AssertionError("\n".join(report))
+   151	    records = parse_jsonl(stdout, label)
+   152	    state = response(records, "state-" + label, "get_state")
+   153	    state_data = state.get("data")
+   154	    if not isinstance(state_data, dict):
+   155	        raise AssertionError(f"{label}: get_state data is not an object")
+   156	    if state_data.get("sessionName") != label or not isinstance(state_data.get("sessionFile"), str):
+   157	        raise AssertionError(f"{label}: get_state session identity invalid: {state_data!r}")
+   158	
+   159	    observed = response(records, "observer-" + label, "bash")
+   160	    observed_data = observed.get("data")
+   161	    if not isinstance(observed_data, dict):
+   162	        raise AssertionError(f"{label}: bash data is not an object")
+   163	    output = observed_data.get("output")
+   164	    if observed_data.get("exitCode") != 0 or observed_data.get("cancelled") is not False or not isinstance(output, str):
+   165	        raise AssertionError(f"{label}: bash response shape invalid: {observed_data!r}")
+   166	    first_line, separator, status_text = output.partition("\n")
+   167	    canonical_worktree = os.path.realpath(worktree)
+   168	    expected_prefix = f"OBSERVER label={label} change={change} cwd={canonical_worktree} "
+   169	    if not first_line.startswith(expected_prefix):
+   170	        raise AssertionError(f"{label}: observer identity mismatch: {first_line!r}")
+   171	    match = re.search(r" pi_pid=([0-9]+) handshake=([0-9]+)$", first_line)
+   172	    if match is None or int(match.group(1)) != proc.pid or int(match.group(2)) != proc.pid:
+   173	        raise AssertionError(f"{label}: PID handshake is not current-process-bound: {first_line!r}, spawned={proc.pid}")
+   174	    if separator != "\n":
+   175	        raise AssertionError(f"{label}: openspec status output missing")
+   176	    status = json.loads(status_text)
+   177	    if not isinstance(status, dict) or status.get("changeName") != change:
+   178	        raise AssertionError(f"{label}: openspec status shape/change mismatch: {status!r}")
+   179	    planning = status.get("planningHome")
+   180	    if not isinstance(planning, dict) or planning.get("root") != canonical_worktree:
+   181	        raise AssertionError(f"{label}: openspec root crossed worktrees: {planning!r}")
+   182	    report.append("RPC_VALIDATION=PASS current PID handshake, cwd, session identity, and OpenSpec change/root")
+   183	    return "\n".join(report)
+   184	
+   185	
+   186	def run_pair(args: list[str]) -> None:
+   187	    if len(args) != 7:
+   188	        raise SystemExit("pair requires alpha beta pi_dir session_root alpha_change beta_change")
+   189	    alpha, beta, pi_dir, session_root, alpha_change, beta_change = args[1:]
+   190	    calls = [
+   191	        (alpha, pi_dir, session_root, "alpha-" + alpha_change, alpha_change),
+   192	        (beta, pi_dir, session_root, "beta-" + beta_change, beta_change),
+   193	    ]
+   194	    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+   195	        futures = [executor.submit(run_guarded, *call) for call in calls]
+   196	        reports = [future.result(timeout=TIMEOUT_SECONDS + 5) for future in futures]
+   197	    for report in reports:
+   198	        print(report)
+   199	    print("CONCURRENT_GUARDED_RPC_VALIDATION=PASS")
+   200	
+   201	
+   202	def run_single(args: list[str]) -> None:
+   203	    if len(args) != 6:
+   204	        raise SystemExit("single requires worktree pi_dir session_root label change")
+   205	    print(run_guarded(*args[1:]))
+   206	    print("RESTORED_GUARDED_RPC_VALIDATION=PASS")
+   207	
+   208	
+   209	def run_halt(args: list[str]) -> None:
+   210	    if len(args) != 6:
+   211	        raise SystemExit("halt requires worktree pi_dir session_root bash_sentinel html_sentinel")
+   212	    worktree, pi_dir, session_root, bash_sentinel, html_sentinel = args[1:]
+   213	    pathlib.Path(session_root).mkdir(parents=True, exist_ok=True)
+   214	    argv = rpc_argv(session_root, "alpha-canary-halt")
+   215	    payload = "\n".join([
+   216	        json.dumps({"id": "queued-bash", "type": "bash", "command": "touch " + bash_sentinel}),
+   217	        json.dumps({"id": "queued-export", "type": "export_html", "outputPath": html_sentinel}),
+   218	        "",
+   219	    ])
+   220	    proc = subprocess.Popen(
+   221	        argv,
+   222	        cwd=worktree,
+   223	        env=top_level_env(pi_dir),
+   224	        stdin=subprocess.PIPE,
+   225	        stdout=subprocess.PIPE,
+   226	        stderr=subprocess.PIPE,
+   227	        text=True,
+   228	    )
+   229	    try:
+   230	        stdout, stderr = proc.communicate(payload, timeout=TIMEOUT_SECONDS)
+   231	    except subprocess.TimeoutExpired as error:
+   232	        proc.kill()
+   233	        stdout, stderr = proc.communicate()
+   234	        raise AssertionError(f"halt probe timed out after {TIMEOUT_SECONDS}s") from error
+   235	    print("RPC_COMMAND=" + " ".join(argv))
+   236	    print("RPC_CWD=" + worktree)
+   237	    print("RPC_QUEUED_COMMANDS=bash touch sentinel; export_html sentinel")
+   238	    print("RPC_TOP_LEVEL_ENV=PI_SUBAGENT_DEPTH unset; PI_SUBAGENT_STACK unset; __FORCE_DELEGATE_LOADED unset")
+   239	    print("RPC_PID=" + str(proc.pid))
+   240	    print("RPC_EXIT=" + str(proc.returncode))
+   241	    print("--- RPC STDOUT ---")
+   242	    print(stdout, end="" if stdout.endswith("\n") or stdout == "" else "\n")
+   243	    print("--- RPC STDERR ---")
+   244	    print(stderr, end="" if stderr.endswith("\n") or stderr == "" else "\n")
+   245	    if proc.returncode == 0:
+   246	        raise AssertionError("unguarded RPC unexpectedly exited zero")
+   247	    if "HARNESS UNGUARDED" not in stderr:
+   248	        raise AssertionError("unguarded RPC stderr lacks loud HARNESS UNGUARDED")
+   249	    if pathlib.Path(bash_sentinel).exists() or pathlib.Path(html_sentinel).exists():
+   250	        raise AssertionError("a queued mutating RPC command executed after HALT")
+   251	    print("CANARY_HALT_VALIDATION=PASS nonzero, loud, queued bash/export did not execute")
+   252	
+   253	
+   254	def main() -> None:
+   255	    mode = sys.argv[1] if len(sys.argv) > 1 else ""
+   256	    if mode == "pair":
+   257	        run_pair(sys.argv[1:])
+   258	    elif mode == "single":
+   259	        run_single(sys.argv[1:])
+   260	    elif mode == "halt":
+   261	        run_halt(sys.argv[1:])
+   262	    else:
+   263	        raise SystemExit("usage: rpc-probe.py pair|single|halt ...")
+   264	
+   265	
+   266	if __name__ == "__main__":
+   267	    main()
+[exit 0]
+
+$ mkdir -p /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture && rsync current deliverables into fixture with exclusions
+[exit 0]
+
+$ mkdir -p '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory' && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' init && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' config user.name 'Task 5.1 Fixture' && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' config user.email 'task-5.1@example.invalid' && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' add -A && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' commit -m 'disposable current-working-tree delivery fixture'
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Initialized empty Git repository in /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/.git/
+[master (root-commit) 36f298f] disposable current-working-tree delivery fixture
+ 337 files changed, 47097 insertions(+)
+ create mode 100644 .cursor/commands/opsx-apply.md
+ create mode 100644 .cursor/commands/opsx-archive.md
+ create mode 100644 .cursor/commands/opsx-explore.md
+ create mode 100644 .cursor/commands/opsx-propose.md
+ create mode 100644 .cursor/commands/opsx-sync.md
+ create mode 100644 .cursor/skills/openspec-apply-change/SKILL.md
+ create mode 100644 .cursor/skills/openspec-archive-change/SKILL.md
+ create mode 100644 .cursor/skills/openspec-explore/SKILL.md
+ create mode 100644 .cursor/skills/openspec-propose/SKILL.md
+ create mode 100644 .cursor/skills/openspec-sync-specs/SKILL.md
+ create mode 100644 .github/workflows/docs-lint.yml
+ create mode 100644 .gitignore
+ create mode 100644 .harness-marker
+ create mode 100644 .lycheeignore
+ create mode 100644 .markdownlint-cli2.jsonc
+ create mode 100644 .vale.ini
+ create mode 100644 .valeignore
+ create mode 100644 AGENTS.md
+ create mode 100644 HARDENING_PLAN.md
+ create mode 100644 IMPLEMENTATION_PLAN.md
+ create mode 100644 LICENSE
+ create mode 100644 README.md
+ create mode 100644 SHAKEDOWN.md
+ create mode 100644 agents/architecture-writer.md
+ create mode 100644 agents/developer.md
+ create mode 100644 agents/evolution-narrator.md
+ create mode 100644 agents/reviewer.md
+ create mode 100644 agents/solution-architect.md
+ create mode 100644 agents/spec-reviewer.md
+ create mode 100644 agents/tech-writer.md
+ create mode 100644 cspell.json
+ create mode 100644 docs/architecture/01-introduction-and-goals.md
+ create mode 100644 docs/architecture/02-constraints.md
+ create mode 100644 docs/architecture/03-context-and-scope.md
+ create mode 100644 docs/architecture/04-solution-strategy.md
+ create mode 100644 docs/architecture/05-building-block-view.md
+ create mode 100644 docs/architecture/06-runtime-view.md
+ create mode 100644 docs/architecture/07-deployment-view.md
+ create mode 100644 docs/architecture/08-crosscutting-concepts.md
+ create mode 100644 docs/architecture/09-architecture-decisions.md
+ create mode 100644 docs/architecture/10-quality-requirements.md
+ create mode 100644 docs/architecture/11-risks-and-technical-debt.md
+ create mode 100644 docs/architecture/12-glossary.md
+ create mode 100644 docs/architecture/README.md
+ create mode 100644 docs/architecture/index.html
+ create mode 100644 docs/close-out.md
+ create mode 100644 docs/decisions/0001-cross-family-reviewer.md
+ create mode 100644 docs/decisions/0002-architecture-writer-agent.md
+ create mode 100644 docs/decisions/0003-read-subagent-cost-from-parent-tool-results.md
+ create mode 100644 docs/decisions/0004-prefer-native-subagent-usage-over-legacy-annotations.md
+ create mode 100644 docs/decisions/0005-escape-dynamic-session-cost-html.md
+ create mode 100644 docs/operating-risks.html
+ create mode 100644 extensions/architect-scope/index.test.ts
+ create mode 100644 extensions/architect-scope/index.ts
+ create mode 100644 extensions/branch-guard/index.test.ts
+ create mode 100644 extensions/branch-guard/index.ts
+ create mode 100644 extensions/developer-guard/index.test.ts
+ create mode 100644 extensions/developer-guard/index.ts
+ create mode 100644 extensions/force-delegate/index.test.ts
+ create mode 100644 extensions/force-delegate/index.ts
+ create mode 100644 extensions/harness-selftest/index.test.ts
+ create mode 100644 extensions/harness-selftest/index.ts
+ create mode 100644 extensions/learnings-inject/index.test.ts
+ create mode 100644 extensions/learnings-inject/index.ts
+ create mode 100644 extensions/lib/tool-events.test.ts
+ create mode 100644 extensions/lib/tool-events.ts
+ create mode 100644 extensions/opsx-reminder/index.ts
+ create mode 100644 extensions/worktree-canary/index.test.ts
+ create mode 100644 extensions/worktree-canary/index.ts
+ create mode 100644 goals/README.md
+ create mode 100644 goals/_TEMPLATE.md
+ create mode 100644 goals/retrieval-engine-tests-pass.md
+ create mode 100644 index.html
+ create mode 100755 install.sh
+ create mode 100644 justfile
+ create mode 100644 justfile.opsx
+ create mode 100644 justfile.structurizr
+ create mode 100644 learnings/LRN-0001-pi-loader-no-regex-literals.md
+ create mode 100644 learnings/LRN-0002-recipe-layout-false-pass.md
+ create mode 100644 learnings/LRN-0003-importable-fragment-no-default.md
+ create mode 100644 learnings/LRN-0004-artifact-owner-path-alignment.md
+ create mode 100644 learnings/LRN-0005-vocabulary-does-not-fix-prose.md
+ create mode 100644 learnings/LRN-0006-probe-evidence-must-persist.md
+ create mode 100644 learnings/README.md
+ create mode 100644 learnings/_TEMPLATE.md
+ create mode 100644 model-profiles.json
+ create mode 100644 openspec/apply-policy.config.yaml
+ create mode 100644 openspec/changes/add-hld-war-assessment/design.md
+ create mode 100644 openspec/changes/add-hld-war-assessment/proposal.md
+ create mode 100644 openspec/changes/add-hld-war-assessment/review-log.md
+ create mode 100644 openspec/changes/add-hld-war-assessment/specs/agent-path-scoping/spec.md
+ create mode 100644 openspec/changes/add-hld-war-assessment/specs/hld-war-assessment/spec.md
+ create mode 100644 openspec/changes/add-hld-war-assessment/specs/war-lint/spec.md
+ create mode 100644 openspec/changes/add-hld-war-assessment/tasks.md
+ create mode 100644 openspec/changes/add-structurizr-diagram-option/.openspec.yaml
+ create mode 100644 openspec/changes/add-structurizr-diagram-option/design.md
+ create mode 100644 openspec/changes/add-structurizr-diagram-option/proposal.md
+ create mode 100644 openspec/changes/add-structurizr-diagram-option/review-log.md
+ create mode 100644 openspec/changes/add-structurizr-diagram-option/specs/structurizr-diagram-rendering/spec.md
+ create mode 100644 openspec/changes/add-structurizr-diagram-option/tasks.md
+ create mode 100644 openspec/changes/add-trust-and-goals/proposal.md
+ create mode 100644 openspec/changes/add-trust-and-goals/review-log.md
+ create mode 100644 openspec/changes/add-trust-and-goals/specs/trust-and-goals/spec.md
+ create mode 100644 openspec/changes/add-trust-and-goals/tasks.md
+ create mode 100644 openspec/changes/add-worktree-isolation/design.md
+ create mode 100644 openspec/changes/add-worktree-isolation/probes/5.1-live-shakedown.txt
+ create mode 100644 openspec/changes/add-worktree-isolation/proposal.md
+ create mode 100644 openspec/changes/add-worktree-isolation/review-log.md
+ create mode 100644 openspec/changes/add-worktree-isolation/specs/shared-ledger-locking/spec.md
+ create mode 100644 openspec/changes/add-worktree-isolation/specs/worktree-guard-canary/spec.md
+ create mode 100644 openspec/changes/add-worktree-isolation/specs/worktree-openspec-conventions/spec.md
+ create mode 100644 openspec/changes/add-worktree-isolation/specs/worktree-provisioning/spec.md
+ create mode 100644 openspec/changes/add-worktree-isolation/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-09-add-project-installer/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-09-add-project-installer/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-09-add-project-installer/specs/project-onboarding/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-09-add-project-installer/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/design.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/probes/task-4.1-arch-lint-regression.out
+ create mode 100755 openspec/changes/archive/2026-07-17-add-architecture-writer/probes/task-4.1-arch-lint-regression.sh
+ create mode 100755 openspec/changes/archive/2026-07-17-add-architecture-writer/probes/task-4.2-archive-check-regression.sh
+ create mode 100755 openspec/changes/archive/2026-07-17-add-architecture-writer/probes/task-5.1-waf-grounding-regression.sh
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/specs/agent-path-scoping/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/specs/arch-lint/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/specs/architecture-doc/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/specs/waf-grounding/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-17-add-architecture-writer/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/design.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/specs/arch-lint/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/specs/architecture-doc/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/specs/shared-theme/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-architecture-html/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-evolution-timeline/design.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-evolution-timeline/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-evolution-timeline/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-evolution-timeline/specs/evolution-timeline/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-19-add-evolution-timeline/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-20-add-algorithm-grafts/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-20-add-algorithm-grafts/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-20-add-algorithm-grafts/specs/algorithm-grafts/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-20-add-algorithm-grafts/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-20-harden-architect-scope/design.md
+ create mode 100644 openspec/changes/archive/2026-07-20-harden-architect-scope/probes/selftest-probe.txt
+ create mode 100644 openspec/changes/archive/2026-07-20-harden-architect-scope/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-20-harden-architect-scope/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-20-harden-architect-scope/specs/architect-scope/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-20-harden-architect-scope/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-architect-grounding/design.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-architect-grounding/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-architect-grounding/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-architect-grounding/specs/architect-grounding/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-architect-grounding/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/design.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/docs/architecture/README.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/docs/session-cost.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/specs/session-cost/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-session-cost/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-tool-event-audit/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-tool-event-audit/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-tool-event-audit/specs/tool-event-audit/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-21-add-tool-event-audit/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-21-fix-spec-template-lint/design.md
+ create mode 100644 openspec/changes/archive/2026-07-21-fix-spec-template-lint/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-21-fix-spec-template-lint/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-21-fix-spec-template-lint/specs/docs-gate-ci/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-21-fix-spec-template-lint/specs/lint-clean-templates/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-21-fix-spec-template-lint/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-21-upgrade-reminder-ui/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-21-upgrade-reminder-ui/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-21-upgrade-reminder-ui/specs/reminder-ui/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-21-upgrade-reminder-ui/tasks.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/design.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/proposal.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/review-log.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/specs/orchestrator-bookkeeping/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/specs/project-onboarding/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/specs/spec-promotion-safety/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/specs/verdict-ledger-fidelity/spec.md
+ create mode 100644 openspec/changes/archive/2026-07-31-add-orchestrator-bookkeeping/tasks.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/design.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/proposal.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/review-log.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/specs/agent-path-scoping/spec.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/specs/arch-lint/spec.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/specs/architecture-doc/spec.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-architecture-diagrams/tasks.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-learning-loop/design.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-learning-loop/proposal.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-learning-loop/review-log.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-learning-loop/specs/learning-loop/spec.md
+ create mode 100644 openspec/changes/archive/2026-08-02-add-learning-loop/tasks.md
+ create mode 100644 openspec/config.yaml
+ create mode 100644 openspec/schemas/dev-reviewer/schema.yaml
+ create mode 100644 openspec/schemas/dev-reviewer/templates/architecture.md
+ create mode 100644 openspec/schemas/dev-reviewer/templates/design.md
+ create mode 100644 openspec/schemas/dev-reviewer/templates/docs.md
+ create mode 100644 openspec/schemas/dev-reviewer/templates/proposal.md
+ create mode 100644 openspec/schemas/dev-reviewer/templates/review-log.md
+ create mode 100644 openspec/schemas/dev-reviewer/templates/spec.md
+ create mode 100644 openspec/schemas/dev-reviewer/templates/tasks.md
+ create mode 100644 openspec/specs/agent-path-scoping/spec.md
+ create mode 100644 openspec/specs/algorithm-grafts/spec.md
+ create mode 100644 openspec/specs/arch-lint/spec.md
+ create mode 100644 openspec/specs/architect-grounding/spec.md
+ create mode 100644 openspec/specs/architect-scope/spec.md
+ create mode 100644 openspec/specs/architecture-doc/spec.md
+ create mode 100644 openspec/specs/docs-gate-ci/spec.md
+ create mode 100644 openspec/specs/evolution-timeline/spec.md
+ create mode 100644 openspec/specs/learning-loop/spec.md
+ create mode 100644 openspec/specs/lint-clean-templates/spec.md
+ create mode 100644 openspec/specs/orchestrator-bookkeeping/spec.md
+ create mode 100644 openspec/specs/project-onboarding/spec.md
+ create mode 100644 openspec/specs/reminder-ui/spec.md
+ create mode 100644 openspec/specs/session-cost/spec.md
+ create mode 100644 openspec/specs/shared-theme/spec.md
+ create mode 100644 openspec/specs/spec-promotion-safety/spec.md
+ create mode 100644 openspec/specs/tool-event-audit/spec.md
+ create mode 100644 openspec/specs/verdict-ledger-fidelity/spec.md
+ create mode 100644 openspec/specs/waf-grounding/spec.md
+ create mode 100644 prompts/opsx-advise.md
+ create mode 100644 prompts/opsx-compost.md
+ create mode 100644 prompts/opsx-loop.md
+ create mode 100644 prompts/opsx-retro.md
+ create mode 100644 prompts/opsx-review.md
+ create mode 100644 styles/DevReviewer/BannedTells.yml
+ create mode 100644 styles/DevReviewer/Hedging.yml
+ create mode 100644 styles/config/vocabularies/DevReviewer/accept.txt
+ create mode 100644 templates/AGENTS.md
+ create mode 100644 templates/review-log.md
+ create mode 100644 templates/structurizr/structurizr.yml
+ create mode 100644 templates/structurizr/workspace.dsl
+ create mode 100644 tools/arch-lint.ts
+ create mode 100644 tools/architecture-html.test.ts
+ create mode 100644 tools/architecture-html.ts
+ create mode 100644 tools/architecture.template.html
+ create mode 100644 tools/archive-skills.test.ts
+ create mode 100644 tools/assess-tool-events.test.ts
+ create mode 100644 tools/assess-tool-events.ts
+ create mode 100644 tools/audit-learnings.test.ts
+ create mode 100644 tools/audit-learnings.ts
+ create mode 100644 tools/check-doc-contracts.ts
+ create mode 100644 tools/docs-contracts.test.ts
+ create mode 100644 tools/docs-lint-readonly.test.ts
+ create mode 100644 tools/evolution-timeline.template.html
+ create mode 100644 tools/evolution-timeline.test.ts
+ create mode 100644 tools/evolution-timeline.ts
+ create mode 100644 tools/fixtures/contradictory-session-path.md
+ create mode 100644 tools/fixtures/session-with-verdicts.jsonl
+ create mode 100644 tools/fixtures/structurizr/expected/workspace.json
+ create mode 100644 tools/fixtures/structurizr/svg-safety/passive/component-key.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/passive/component.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/passive/container-key.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/passive/container.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/passive/context-key.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/passive/context.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/anchor.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/ascii-control.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/css-at-rule.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/css-comment.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/css-escape.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/css-expression.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/doctype.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/empty.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/entity.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/event-handler.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/event-mixed-case.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/foreign-namespace.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/foreign-object.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/image-href.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/malformed.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/not-svg-root.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/processing-instruction.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/script-mixed-case.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/script.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-absolute-path.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-blob.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-data.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-external.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-file.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-protocol-relative.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/url-relative.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/use-element.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/wrong-root-namespace.svg
+ create mode 100644 tools/fixtures/structurizr/svg-safety/rejected/xml-base.svg
+ create mode 100644 tools/fixtures/structurizr/workspace.dsl
+ create mode 100644 tools/install-canary-upgrade.test.ts
+ create mode 100644 tools/install-structurizr.test.ts
+ create mode 100644 tools/lib/ledger-lock.test.ts
+ create mode 100644 tools/lib/ledger-lock.ts
+ create mode 100644 tools/lib/mermaid.min.js
+ create mode 100644 tools/lib/mermaid.pin.json
+ create mode 100644 tools/lib/theme.css
+ create mode 100644 tools/lib/theme.ts
+ create mode 100644 tools/model-profile.ts
+ create mode 100644 tools/next-lifecycle.test.ts
+ create mode 100644 tools/patch-cursor-heartbeat.ts
+ create mode 100644 tools/promote-guard.test.ts
+ create mode 100644 tools/promote-guard.ts
+ create mode 100644 tools/pylib.ts
+ create mode 100644 tools/record-verdict.test.ts
+ create mode 100644 tools/record-verdict.ts
+ create mode 100644 tools/review-log-template.test.ts
+ create mode 100644 tools/select-learnings.test.ts
+ create mode 100644 tools/select-learnings.ts
+ create mode 100644 tools/session-cost.test.ts
+ create mode 100644 tools/session-cost.ts
+ create mode 100644 tools/structurizr-docker.test.ts
+ create mode 100644 tools/structurizr-docker.ts
+ create mode 100644 tools/structurizr-fs.test.ts
+ create mode 100644 tools/structurizr-fs.ts
+ create mode 100644 tools/structurizr-pin.test.ts
+ create mode 100644 tools/structurizr-pin.ts
+ create mode 100644 tools/structurizr-probe.test.ts
+ create mode 100644 tools/structurizr-probe.ts
+ create mode 100644 tools/structurizr-recipes.test.ts
+ create mode 100644 tools/structurizr-render.test.ts
+ create mode 100644 tools/structurizr-render.ts
+ create mode 100644 tools/structurizr-source.test.ts
+ create mode 100644 tools/structurizr-source.ts
+ create mode 100644 tools/structurizr-template.test.ts
+ create mode 100644 tools/structurizr-verify.test.ts
+ create mode 100644 tools/structurizr-verify.ts
+ create mode 100644 tools/structurizr-workflow.test.ts
+ create mode 100644 tools/structurizr/pin-evidence.md
+ create mode 100644 tools/structurizr/pin.json
+ create mode 100644 tools/trust.test.ts
+ create mode 100644 tools/trust.ts
+ create mode 100644 tools/vendor/structurizr-xml/NOTICE.md
+ create mode 100644 tools/verify-goals.test.ts
+ create mode 100644 tools/verify-goals.ts
+ create mode 100644 tools/waf-grounding.ts
+[exit 0]
+
+$ git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' status --short && test -z "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' status --porcelain)" && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' rev-parse HEAD | tee '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/object-commit.txt' && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' cat-file -t "$(cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/object-commit.txt')"
+36f298fc01418b7993b1541589092c10936dba02
+commit
+[exit 0]
+
+$ git -C '~/GitHub/projects/pi-opsx-dev-reviewer' status --short -- SHAKEDOWN.md openspec/changes/add-worktree-isolation && git -C '~/GitHub/projects/pi-opsx-dev-reviewer' diff --cached --name-only
+ M SHAKEDOWN.md
+?? openspec/changes/add-worktree-isolation/
+[exit 0]
+
+$ mkdir -p '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions' && cp '/tmp/pi-opsx-5.1-pi-stub' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin/pi' && chmod +x '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin/pi' && shasum -a 256 '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin/pi' && nl -ba '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin/pi'
+17ae3551f22a79734ca8955772902ab65921660837c43bf90b66124cc5da7e68  /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin/pi
+     1	#!/usr/bin/env bash
+     2	set -euo pipefail
+     3	REAL_PI=~/.nvm/versions/node/v24.16.0/bin/pi
+     4	case "${1:-}" in
+     5	  --version|-v) exec "$REAL_PI" --version ;;
+     6	  list) echo "pi-install-stub: isolated package list is empty" ;;
+     7	  install) echo "pi-install-stub: harmless success for ${2:-missing-source}" ;;
+     8	  *) echo "pi-install-stub: unsupported invocation: $*" >&2; exit 64 ;;
+     9	esac
+[exit 0]
+
+$ cd /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture && env PI_CODING_AGENT_DIR=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent PATH=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/stub-bin:$PATH ./install.sh
+→ Checking pi…
+  pi 0.83.0
+→ Ensuring @mjakl/pi-subagent is installed…
+pi-install-stub: harmless success for npm:@mjakl/pi-subagent
+→ Installed architect/developer/reviewer/tech-writer/spec-reviewer/architecture-writer/evolution-narrator agents to /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/agents
+→ Installed /opsx-loop, /opsx-review, /opsx-retro, /opsx-compost, /opsx-advise prompt templates to /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/prompts
+→ Installed global worktree canary to /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts
+→ Verify the agent models resolve on this machine (edit the 'model:' line if not):
+      solution-architect   openai-codex/gpt-5.6-sol
+      developer            openai-codex/gpt-5.6-sol
+      reviewer             openai-codex/gpt-5.6-terra
+      tech-writer          openai-codex/gpt-5.6-terra
+      spec-reviewer        openai-codex/gpt-5.6-terra
+      architecture-writer  openai-codex/gpt-5.6-sol
+      evolution-narrator   openai-codex/gpt-5.6-terra
+
+    ⚠ Every agent is pinned to a single provider (openai-codex).
+      The reviewer then shares a training corpus with the developer it reviews, so a PASS is
+      correlated blindness rather than independent confirmation — the de-bias premise the
+      reviewer role is built on does not hold. Repoint reviewer/spec-reviewer at another
+      provider (e.g. anthropic/claude-opus-4-8) if you have its key configured.
+    List what is available with:  pi --list-models
+
+✓ pi-side (global) setup complete.
+[exit 0]
+
+$ test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts' && cmp '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/extensions/worktree-canary/index.ts' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/.pi' && printf 'GLOBAL_CANARY=%s\n' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts'
+GLOBAL_CANARY=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts
+[exit 0]
+
+$ cd /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture && just worktree alpha
+Preparing worktree (new branch 'session/alpha')
+HEAD is now at 36f298f disposable current-working-tree delivery fixture
+  · extensions → .pi/extensions/ (8 local guards; global canary excluded)
+  · memory → /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory (shared)
+[exit 0]
+
+$ cd /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture && just worktree beta
+Preparing worktree (new branch 'session/beta')
+HEAD is now at 36f298f disposable current-working-tree delivery fixture
+  · extensions → .pi/extensions/ (8 local guards; global canary excluded)
+  · memory → /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory (shared)
+[exit 0]
+
+$ test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' && test "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' branch --show-current)" = 'session/alpha' && test "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' branch --show-current)" = 'session/beta' && printf 'ALPHA_PATH=%s BRANCH=%s\n' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' branch --show-current)" && printf 'BETA_PATH=%s BRANCH=%s\n' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' branch --show-current)"
+ALPHA_PATH=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha BRANCH=session/alpha
+BETA_PATH=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta BRANCH=session/beta
+[exit 0]
+
+$ printf '%s\n' '--- registered worktrees ---'; git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' worktree list --porcelain; printf '%s\n' '--- alpha local extensions ---'; find '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions' -mindepth 1 -maxdepth 1 -print | sort; printf '%s\n' '--- beta local extensions ---'; find '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions' -mindepth 1 -maxdepth 1 -print | sort; test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/force-delegate' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/branch-guard' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/architect-scope' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/developer-guard' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/opsx-reminder' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/lib' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/force-delegate' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/branch-guard' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/architect-scope' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/developer-guard' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/opsx-reminder' && test -d '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/lib' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/worktree-canary' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/worktree-canary' && test -L '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/memory' && test -L '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/memory' && test "$(cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/memory' && pwd -P)" = "$(cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory' && pwd -P)" && test "$(cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/memory' && pwd -P)" = "$(cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory' && pwd -P)" && printf 'LOCAL_GUARDS_AND_SHARED_MEMORY=PASS global canary excluded locally\n'
+--- registered worktrees ---
+worktree /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture
+HEAD 36f298fc01418b7993b1541589092c10936dba02
+branch refs/heads/master
+
+worktree /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha
+HEAD 36f298fc01418b7993b1541589092c10936dba02
+branch refs/heads/session/alpha
+
+worktree /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta
+HEAD 36f298fc01418b7993b1541589092c10936dba02
+branch refs/heads/session/beta
+
+--- alpha local extensions ---
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/architect-scope
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/branch-guard
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/developer-guard
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/force-delegate
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/harness-selftest
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/learnings-inject
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/lib
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/opsx-reminder
+--- beta local extensions ---
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/architect-scope
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/branch-guard
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/developer-guard
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/force-delegate
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/harness-selftest
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/learnings-inject
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/lib
+/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/.pi/extensions/opsx-reminder
+LOCAL_GUARDS_AND_SHARED_MEMORY=PASS global canary excluded locally
+[exit 0]
+
+$ python3 /tmp/pi-opsx-5.1-rpc-probe.py pair /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions add-hld-war-assessment add-structurizr-diagram-option
+RPC_COMMAND=~/.nvm/versions/node/v24.16.0/bin/pi --mode rpc --approve --session-dir /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/alpha-add-hld-war-assessment --name alpha-add-hld-war-assessment --provider openai-codex --model gpt-5.6-sol --thinking off --no-skills --no-prompt-templates --offline
+RPC_CWD=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha
+RPC_TOP_LEVEL_ENV=PI_SUBAGENT_DEPTH unset; PI_SUBAGENT_STACK unset; __FORCE_DELEGATE_LOADED unset
+RPC_PID=72831
+RPC_EXIT=0
+--- RPC STDOUT ---
+{"type":"extension_ui_request","id":"d81f94b4-31a7-4e56-906e-ca6514c7623c","method":"setWidget","widgetKey":"opsx-reminder","widgetLines":["opsx | pending lifecycle actions:","-> 4 draft learning(s) awaiting promotion"],"widgetPlacement":"aboveEditor"}
+{"type":"extension_ui_request","id":"facb79dc-7aeb-4dd0-ac41-95b00e7abf1c","method":"setStatus","statusKey":"opsx","statusText":"opsx: 1 pending"}
+{"id":"state-alpha-add-hld-war-assessment","type":"response","command":"get_state","success":true,"data":{"model":{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","api":"openai-codex-responses","provider":"openai-codex","baseUrl":"https://chatgpt.com/backend-api","reasoning":true,"input":["text","image"],"cost":{"input":5,"output":30,"cacheRead":0.5,"cacheWrite":6.25,"tiers":[{"inputTokensAbove":272000,"input":10,"output":45,"cacheRead":1,"cacheWrite":12.5}]},"contextWindow":272000,"maxTokens":128000,"thinkingLevelMap":{"xhigh":"xhigh","max":"max","minimal":"low"},"compat":{"supportsOpenAIGrammarTools":true,"supportsToolSearch":true}},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"steeringMode":"one-at-a-time","followUpMode":"one-at-a-time","sessionFile":"/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/alpha-add-hld-war-assessment/2026-08-02T20-18-14-576Z_019fc420-89b0-7379-97b5-b321ca95dd4e.jsonl","sessionId":"019fc420-89b0-7379-97b5-b321ca95dd4e","sessionName":"alpha-add-hld-war-assessment","autoCompactionEnabled":true,"messageCount":1,"pendingMessageCount":0}}
+{"type":"bash_execution_update","id":"observer-alpha-add-hld-war-assessment","delta":"OBSERVER label=alpha-add-hld-war-assessment change=add-hld-war-assessment cwd=/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha pi_pid=72831 handshake=72831\n"}
+{"type":"bash_execution_update","id":"observer-alpha-add-hld-war-assessment","delta":"{\n  \"changeName\": \"add-hld-war-assessment\",\n  \"schemaName\": \"dev-reviewer\",\n  \"planningHome\": {\n    \"kind\": \"repo\",\n    \"root\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\",\n    \"changesDir\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes\",\n    \"defaultSchema\": \"spec-driven\"\n  },\n  \"changeRoot\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment\",\n  \"artifactPaths\": {\n    \"proposal\": {\n      \"outputPath\": \"proposal.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\"\n      ]\n    },\n    \"specs\": {\n      \"outputPath\": \"specs/**/*.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/**/*.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/agent-path-scoping/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/hld-war-assessment/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/war-lint/spec.md\"\n      ]\n    },\n    \"design\": {\n      \"outputPath\": \"design.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\"\n      ]\n    },\n    \"tasks\": {\n      \"outputPath\": \"tasks.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\"\n      ]\n    },\n    \"review-report\": {\n      \"outputPath\": \"review-log.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\"\n      ]\n    },\n    \"architecture\": {\n      \"outputPath\": \"docs/architecture/**\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/architecture/**\",\n      \"existingOutputPaths\": []\n    },\n    \"docs\": {\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/{*.md,!(architecture)/**/*.md}\",\n      \"existingOutputPaths\": []\n    }\n  },\n  \"isComplete\": false,\n  \"applyRequires\": [\n    \"tasks\"\n  ],\n  \"nextSteps\": [\n    \"Run openspec instructions architecture --change \\\"add-hld-war-assessment\\\" --json before writing that artifact.\"\n  ],\n  \"actionContext\": {\n    \"mode\": \"repo-local\",\n    \"sourceOfTruth\": \"repo\",\n    \"planningArtifacts\": [\n      \"proposal\",\n      \"design\",\n      \"specs\",\n      \"tasks\",\n      \"architecture\",\n      \"docs\",\n      \"review-report\"\n    ],\n    \"linkedContext\": [],\n    \"allowedEditRoots\": [\n      \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\"\n    ],\n    \"requiresAffectedAreaSelection\": false,\n    \"constraints\": [\n      \"Repo-local change artifacts and implementation edits are scoped to this project.\"\n    ]\n  },\n  \"artifacts\": [\n    {\n      \"id\": \"proposal\",\n      \"outputPath\": \"proposal.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"design\",\n      \"outputPath\": \"design.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"specs\",\n      \"outputPath\": \"specs/**/*.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"tasks\",\n      \"outputPath\": \"tasks.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"architecture\",\n      \"outputPath\": \"docs/architecture/**\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"docs\",\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"review-report\",\n      \"outputPath\": \"review-log.md\",\n      \"status\": \"done\"\n    }\n  ]\n}\n"}
+{"id":"observer-alpha-add-hld-war-assessment","type":"response","command":"bash","success":true,"data":{"output":"OBSERVER label=alpha-add-hld-war-assessment change=add-hld-war-assessment cwd=/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha pi_pid=72831 handshake=72831\n{\n  \"changeName\": \"add-hld-war-assessment\",\n  \"schemaName\": \"dev-reviewer\",\n  \"planningHome\": {\n    \"kind\": \"repo\",\n    \"root\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\",\n    \"changesDir\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes\",\n    \"defaultSchema\": \"spec-driven\"\n  },\n  \"changeRoot\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment\",\n  \"artifactPaths\": {\n    \"proposal\": {\n      \"outputPath\": \"proposal.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\"\n      ]\n    },\n    \"specs\": {\n      \"outputPath\": \"specs/**/*.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/**/*.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/agent-path-scoping/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/hld-war-assessment/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/war-lint/spec.md\"\n      ]\n    },\n    \"design\": {\n      \"outputPath\": \"design.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\"\n      ]\n    },\n    \"tasks\": {\n      \"outputPath\": \"tasks.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\"\n      ]\n    },\n    \"review-report\": {\n      \"outputPath\": \"review-log.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\"\n      ]\n    },\n    \"architecture\": {\n      \"outputPath\": \"docs/architecture/**\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/architecture/**\",\n      \"existingOutputPaths\": []\n    },\n    \"docs\": {\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/{*.md,!(architecture)/**/*.md}\",\n      \"existingOutputPaths\": []\n    }\n  },\n  \"isComplete\": false,\n  \"applyRequires\": [\n    \"tasks\"\n  ],\n  \"nextSteps\": [\n    \"Run openspec instructions architecture --change \\\"add-hld-war-assessment\\\" --json before writing that artifact.\"\n  ],\n  \"actionContext\": {\n    \"mode\": \"repo-local\",\n    \"sourceOfTruth\": \"repo\",\n    \"planningArtifacts\": [\n      \"proposal\",\n      \"design\",\n      \"specs\",\n      \"tasks\",\n      \"architecture\",\n      \"docs\",\n      \"review-report\"\n    ],\n    \"linkedContext\": [],\n    \"allowedEditRoots\": [\n      \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\"\n    ],\n    \"requiresAffectedAreaSelection\": false,\n    \"constraints\": [\n      \"Repo-local change artifacts and implementation edits are scoped to this project.\"\n    ]\n  },\n  \"artifacts\": [\n    {\n      \"id\": \"proposal\",\n      \"outputPath\": \"proposal.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"design\",\n      \"outputPath\": \"design.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"specs\",\n      \"outputPath\": \"specs/**/*.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"tasks\",\n      \"outputPath\": \"tasks.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"architecture\",\n      \"outputPath\": \"docs/architecture/**\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"docs\",\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"review-report\",\n      \"outputPath\": \"review-log.md\",\n      \"status\": \"done\"\n    }\n  ]\n}\n","exitCode":0,"cancelled":false,"truncated":false}}
+--- RPC STDERR ---
+
+----- opsx-reminder -----
+-> 4 draft learning(s) awaiting promotion
+RPC_VALIDATION=PASS current PID handshake, cwd, session identity, and OpenSpec change/root
+RPC_COMMAND=~/.nvm/versions/node/v24.16.0/bin/pi --mode rpc --approve --session-dir /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/beta-add-structurizr-diagram-option --name beta-add-structurizr-diagram-option --provider openai-codex --model gpt-5.6-sol --thinking off --no-skills --no-prompt-templates --offline
+RPC_CWD=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta
+RPC_TOP_LEVEL_ENV=PI_SUBAGENT_DEPTH unset; PI_SUBAGENT_STACK unset; __FORCE_DELEGATE_LOADED unset
+RPC_PID=72832
+RPC_EXIT=0
+--- RPC STDOUT ---
+{"type":"extension_ui_request","id":"857bc8da-3ea9-4528-9fc4-dd5db1094079","method":"setWidget","widgetKey":"opsx-reminder","widgetLines":["opsx | pending lifecycle actions:","-> 4 draft learning(s) awaiting promotion"],"widgetPlacement":"aboveEditor"}
+{"type":"extension_ui_request","id":"51cbbe81-be61-44e0-b9fb-c8c3bd6f1655","method":"setStatus","statusKey":"opsx","statusText":"opsx: 1 pending"}
+{"id":"state-beta-add-structurizr-diagram-option","type":"response","command":"get_state","success":true,"data":{"model":{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","api":"openai-codex-responses","provider":"openai-codex","baseUrl":"https://chatgpt.com/backend-api","reasoning":true,"input":["text","image"],"cost":{"input":5,"output":30,"cacheRead":0.5,"cacheWrite":6.25,"tiers":[{"inputTokensAbove":272000,"input":10,"output":45,"cacheRead":1,"cacheWrite":12.5}]},"contextWindow":272000,"maxTokens":128000,"thinkingLevelMap":{"xhigh":"xhigh","max":"max","minimal":"low"},"compat":{"supportsOpenAIGrammarTools":true,"supportsToolSearch":true}},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"steeringMode":"one-at-a-time","followUpMode":"one-at-a-time","sessionFile":"/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/beta-add-structurizr-diagram-option/2026-08-02T20-18-14-576Z_019fc420-89b0-734a-ac4c-b959257d2a5b.jsonl","sessionId":"019fc420-89b0-734a-ac4c-b959257d2a5b","sessionName":"beta-add-structurizr-diagram-option","autoCompactionEnabled":true,"messageCount":1,"pendingMessageCount":0}}
+{"type":"bash_execution_update","id":"observer-beta-add-structurizr-diagram-option","delta":"OBSERVER label=beta-add-structurizr-diagram-option change=add-structurizr-diagram-option cwd=/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta pi_pid=72832 handshake=72832\n"}
+{"type":"bash_execution_update","id":"observer-beta-add-structurizr-diagram-option","delta":"{\n  \"changeName\": \"add-structurizr-diagram-option\",\n  \"schemaName\": \"dev-reviewer\",\n  \"planningHome\": {\n    \"kind\": \"repo\",\n    \"root\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta\",\n    \"changesDir\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes\",\n    \"defaultSchema\": \"spec-driven\"\n  },\n  \"changeRoot\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option\",\n  \"artifactPaths\": {\n    \"proposal\": {\n      \"outputPath\": \"proposal.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/proposal.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/proposal.md\"\n      ]\n    },\n    \"specs\": {\n      \"outputPath\": \"specs/**/*.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/specs/**/*.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/specs/structurizr-diagram-rendering/spec.md\"\n      ]\n    },\n    \"design\": {\n      \"outputPath\": \"design.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/design.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/design.md\"\n      ]\n    },\n    \"tasks\": {\n      \"outputPath\": \"tasks.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/tasks.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/tasks.md\"\n      ]\n    },\n    \"review-report\": {\n      \"outputPath\": \"review-log.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/review-log.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/review-log.md\"\n      ]\n    },\n    \"architecture\": {\n      \"outputPath\": \"docs/architecture/**\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/docs/architecture/**\",\n      \"existingOutputPaths\": []\n    },\n    \"docs\": {\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/docs/{*.md,!(architecture)/**/*.md}\",\n      \"existingOutputPaths\": []\n    }\n  },\n  \"isComplete\": false,\n  \"applyRequires\": [\n    \"tasks\"\n  ],\n  \"nextSteps\": [\n    \"Run openspec instructions architecture --change \\\"add-structurizr-diagram-option\\\" --json before writing that artifact.\"\n  ],\n  \"actionContext\": {\n    \"mode\": \"repo-local\",\n    \"sourceOfTruth\": \"repo\",\n    \"planningArtifacts\": [\n      \"proposal\",\n      \"design\",\n      \"specs\",\n      \"tasks\",\n      \"architecture\",\n      \"docs\",\n      \"review-report\"\n    ],\n    \"linkedContext\": [],\n    \"allowedEditRoots\": [\n      \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta\"\n    ],\n    \"requiresAffectedAreaSelection\": false,\n    \"constraints\": [\n      \"Repo-local change artifacts and implementation edits are scoped to this project.\"\n    ]\n  },\n  \"artifacts\": [\n    {\n      \"id\": \"proposal\",\n      \"outputPath\": \"proposal.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"design\",\n      \"outputPath\": \"design.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"specs\",\n      \"outputPath\": \"specs/**/*.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"tasks\",\n      \"outputPath\": \"tasks.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"architecture\",\n      \"outputPath\": \"docs/architecture/**\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"docs\",\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"review-report\",\n      \"outputPath\": \"review-log.md\",\n      \"status\": \"done\"\n    }\n  ]\n}\n"}
+{"id":"observer-beta-add-structurizr-diagram-option","type":"response","command":"bash","success":true,"data":{"output":"OBSERVER label=beta-add-structurizr-diagram-option change=add-structurizr-diagram-option cwd=/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta pi_pid=72832 handshake=72832\n{\n  \"changeName\": \"add-structurizr-diagram-option\",\n  \"schemaName\": \"dev-reviewer\",\n  \"planningHome\": {\n    \"kind\": \"repo\",\n    \"root\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta\",\n    \"changesDir\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes\",\n    \"defaultSchema\": \"spec-driven\"\n  },\n  \"changeRoot\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option\",\n  \"artifactPaths\": {\n    \"proposal\": {\n      \"outputPath\": \"proposal.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/proposal.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/proposal.md\"\n      ]\n    },\n    \"specs\": {\n      \"outputPath\": \"specs/**/*.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/specs/**/*.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/specs/structurizr-diagram-rendering/spec.md\"\n      ]\n    },\n    \"design\": {\n      \"outputPath\": \"design.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/design.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/design.md\"\n      ]\n    },\n    \"tasks\": {\n      \"outputPath\": \"tasks.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/tasks.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/tasks.md\"\n      ]\n    },\n    \"review-report\": {\n      \"outputPath\": \"review-log.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/review-log.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/review-log.md\"\n      ]\n    },\n    \"architecture\": {\n      \"outputPath\": \"docs/architecture/**\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/docs/architecture/**\",\n      \"existingOutputPaths\": []\n    },\n    \"docs\": {\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/docs/{*.md,!(architecture)/**/*.md}\",\n      \"existingOutputPaths\": []\n    }\n  },\n  \"isComplete\": false,\n  \"applyRequires\": [\n    \"tasks\"\n  ],\n  \"nextSteps\": [\n    \"Run openspec instructions architecture --change \\\"add-structurizr-diagram-option\\\" --json before writing that artifact.\"\n  ],\n  \"actionContext\": {\n    \"mode\": \"repo-local\",\n    \"sourceOfTruth\": \"repo\",\n    \"planningArtifacts\": [\n      \"proposal\",\n      \"design\",\n      \"specs\",\n      \"tasks\",\n      \"architecture\",\n      \"docs\",\n      \"review-report\"\n    ],\n    \"linkedContext\": [],\n    \"allowedEditRoots\": [\n      \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta\"\n    ],\n    \"requiresAffectedAreaSelection\": false,\n    \"constraints\": [\n      \"Repo-local change artifacts and implementation edits are scoped to this project.\"\n    ]\n  },\n  \"artifacts\": [\n    {\n      \"id\": \"proposal\",\n      \"outputPath\": \"proposal.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"design\",\n      \"outputPath\": \"design.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"specs\",\n      \"outputPath\": \"specs/**/*.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"tasks\",\n      \"outputPath\": \"tasks.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"architecture\",\n      \"outputPath\": \"docs/architecture/**\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"docs\",\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"review-report\",\n      \"outputPath\": \"review-log.md\",\n      \"status\": \"done\"\n    }\n  ]\n}\n","exitCode":0,"cancelled":false,"truncated":false}}
+--- RPC STDERR ---
+
+----- opsx-reminder -----
+-> 4 draft learning(s) awaiting promotion
+RPC_VALIDATION=PASS current PID handshake, cwd, session identity, and OpenSpec change/root
+CONCURRENT_GUARDED_RPC_VALIDATION=PASS
+[exit 0]
+
+$ mv '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/force-delegate' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.force-delegate.stripped' && mv '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/harness-selftest' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.harness-selftest.stripped' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/force-delegate' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/harness-selftest' && test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts' && printf 'STRIPPED=force-delegate,harness-selftest; GLOBAL_CANARY_SOLE_HANDSHAKE_CONSUMER=%s\n' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts'
+STRIPPED=force-delegate,harness-selftest; GLOBAL_CANARY_SOLE_HANDSHAKE_CONSUMER=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts
+[exit 0]
+
+$ python3 /tmp/pi-opsx-5.1-rpc-probe.py halt /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/halt /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/canary-bash-must-not-exist /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/canary-export-must-not-exist.html
+RPC_COMMAND=~/.nvm/versions/node/v24.16.0/bin/pi --mode rpc --approve --session-dir /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/halt --name alpha-canary-halt --provider openai-codex --model gpt-5.6-sol --thinking off --no-skills --no-prompt-templates --offline
+RPC_CWD=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha
+RPC_QUEUED_COMMANDS=bash touch sentinel; export_html sentinel
+RPC_TOP_LEVEL_ENV=PI_SUBAGENT_DEPTH unset; PI_SUBAGENT_STACK unset; __FORCE_DELEGATE_LOADED unset
+RPC_PID=72973
+RPC_EXIT=1
+--- RPC STDOUT ---
+{"type":"extension_ui_request","id":"5cbfce86-658b-441e-bc1e-205db6a1f915","method":"setWidget","widgetKey":"opsx-reminder","widgetLines":["opsx | pending lifecycle actions:","-> 4 draft learning(s) awaiting promotion"],"widgetPlacement":"aboveEditor"}
+--- RPC STDERR ---
+
+----- opsx-reminder -----
+-> 4 draft learning(s) awaiting promotion
+
+
+########## HARNESS UNGUARDED -- force-delegate did not load in this top-level process. Stop now and return to the primary checkout. Provision a safe worktree with just worktree <name>. If this directory was created manually, remove it and recreate it through that recipe before restarting pi. ##########
+
+CANARY_HALT_VALIDATION=PASS nonzero, loud, queued bash/export did not execute
+[exit 0]
+
+$ test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/canary-bash-must-not-exist' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/canary-export-must-not-exist.html' && mv '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.force-delegate.stripped' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/force-delegate' && mv '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.harness-selftest.stripped' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/harness-selftest' && test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/force-delegate/index.ts' && test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/.pi/extensions/harness-selftest/index.ts' && printf 'LOCAL_GUARDS_RESTORED=PASS\n'
+LOCAL_GUARDS_RESTORED=PASS
+[exit 0]
+
+$ python3 /tmp/pi-opsx-5.1-rpc-probe.py single /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions alpha-restored-add-hld-war-assessment add-hld-war-assessment
+RPC_COMMAND=~/.nvm/versions/node/v24.16.0/bin/pi --mode rpc --approve --session-dir /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/alpha-restored-add-hld-war-assessment --name alpha-restored-add-hld-war-assessment --provider openai-codex --model gpt-5.6-sol --thinking off --no-skills --no-prompt-templates --offline
+RPC_CWD=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha
+RPC_TOP_LEVEL_ENV=PI_SUBAGENT_DEPTH unset; PI_SUBAGENT_STACK unset; __FORCE_DELEGATE_LOADED unset
+RPC_PID=73050
+RPC_EXIT=0
+--- RPC STDOUT ---
+{"type":"extension_ui_request","id":"6b3c842c-304f-447a-a3c5-359c6e3ad901","method":"setWidget","widgetKey":"opsx-reminder","widgetLines":["opsx | pending lifecycle actions:","-> 4 draft learning(s) awaiting promotion"],"widgetPlacement":"aboveEditor"}
+{"type":"extension_ui_request","id":"2beabf8d-123d-4192-bf33-58ba533849c9","method":"setStatus","statusKey":"opsx","statusText":"opsx: 1 pending"}
+{"id":"state-alpha-restored-add-hld-war-assessment","type":"response","command":"get_state","success":true,"data":{"model":{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","api":"openai-codex-responses","provider":"openai-codex","baseUrl":"https://chatgpt.com/backend-api","reasoning":true,"input":["text","image"],"cost":{"input":5,"output":30,"cacheRead":0.5,"cacheWrite":6.25,"tiers":[{"inputTokensAbove":272000,"input":10,"output":45,"cacheRead":1,"cacheWrite":12.5}]},"contextWindow":272000,"maxTokens":128000,"thinkingLevelMap":{"xhigh":"xhigh","max":"max","minimal":"low"},"compat":{"supportsOpenAIGrammarTools":true,"supportsToolSearch":true}},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"steeringMode":"one-at-a-time","followUpMode":"one-at-a-time","sessionFile":"/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/sessions/alpha-restored-add-hld-war-assessment/2026-08-02T20-18-17-376Z_019fc420-94a0-76e0-9072-65be67a2aaa0.jsonl","sessionId":"019fc420-94a0-76e0-9072-65be67a2aaa0","sessionName":"alpha-restored-add-hld-war-assessment","autoCompactionEnabled":true,"messageCount":1,"pendingMessageCount":0}}
+{"type":"bash_execution_update","id":"observer-alpha-restored-add-hld-war-assessment","delta":"OBSERVER label=alpha-restored-add-hld-war-assessment change=add-hld-war-assessment cwd=/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha pi_pid=73050 handshake=73050\n"}
+{"type":"bash_execution_update","id":"observer-alpha-restored-add-hld-war-assessment","delta":"{\n  \"changeName\": \"add-hld-war-assessment\",\n  \"schemaName\": \"dev-reviewer\",\n  \"planningHome\": {\n    \"kind\": \"repo\",\n    \"root\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\",\n    \"changesDir\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes\",\n    \"defaultSchema\": \"spec-driven\"\n  },\n  \"changeRoot\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment\",\n  \"artifactPaths\": {\n    \"proposal\": {\n      \"outputPath\": \"proposal.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\"\n      ]\n    },\n    \"specs\": {\n      \"outputPath\": \"specs/**/*.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/**/*.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/agent-path-scoping/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/hld-war-assessment/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/war-lint/spec.md\"\n      ]\n    },\n    \"design\": {\n      \"outputPath\": \"design.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\"\n      ]\n    },\n    \"tasks\": {\n      \"outputPath\": \"tasks.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\"\n      ]\n    },\n    \"review-report\": {\n      \"outputPath\": \"review-log.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\"\n      ]\n    },\n    \"architecture\": {\n      \"outputPath\": \"docs/architecture/**\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/architecture/**\",\n      \"existingOutputPaths\": []\n    },\n    \"docs\": {\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/{*.md,!(architecture)/**/*.md}\",\n      \"existingOutputPaths\": []\n    }\n  },\n  \"isComplete\": false,\n  \"applyRequires\": [\n    \"tasks\"\n  ],\n  \"nextSteps\": [\n    \"Run openspec instructions architecture --change \\\"add-hld-war-assessment\\\" --json before writing that artifact.\"\n  ],\n  \"actionContext\": {\n    \"mode\": \"repo-local\",\n    \"sourceOfTruth\": \"repo\",\n    \"planningArtifacts\": [\n      \"proposal\",\n      \"design\",\n      \"specs\",\n      \"tasks\",\n      \"architecture\",\n      \"docs\",\n      \"review-report\"\n    ],\n    \"linkedContext\": [],\n    \"allowedEditRoots\": [\n      \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\"\n    ],\n    \"requiresAffectedAreaSelection\": false,\n    \"constraints\": [\n      \"Repo-local change artifacts and implementation edits are scoped to this project.\"\n    ]\n  },\n  \"artifacts\": [\n    {\n      \"id\": \"proposal\",\n      \"outputPath\": \"proposal.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"design\",\n      \"outputPath\": \"design.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"specs\",\n      \"outputPath\": \"specs/**/*.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"tasks\",\n      \"outputPath\": \"tasks.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"architecture\",\n      \"outputPath\": \"docs/architecture/**\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"docs\",\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"review-report\",\n      \"outputPath\": \"review-log.md\",\n      \"status\": \"done\"\n    }\n  ]\n}\n"}
+{"id":"observer-alpha-restored-add-hld-war-assessment","type":"response","command":"bash","success":true,"data":{"output":"OBSERVER label=alpha-restored-add-hld-war-assessment change=add-hld-war-assessment cwd=/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha pi_pid=73050 handshake=73050\n{\n  \"changeName\": \"add-hld-war-assessment\",\n  \"schemaName\": \"dev-reviewer\",\n  \"planningHome\": {\n    \"kind\": \"repo\",\n    \"root\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\",\n    \"changesDir\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes\",\n    \"defaultSchema\": \"spec-driven\"\n  },\n  \"changeRoot\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment\",\n  \"artifactPaths\": {\n    \"proposal\": {\n      \"outputPath\": \"proposal.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md\"\n      ]\n    },\n    \"specs\": {\n      \"outputPath\": \"specs/**/*.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/**/*.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/agent-path-scoping/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/hld-war-assessment/spec.md\",\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/war-lint/spec.md\"\n      ]\n    },\n    \"design\": {\n      \"outputPath\": \"design.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md\"\n      ]\n    },\n    \"tasks\": {\n      \"outputPath\": \"tasks.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md\"\n      ]\n    },\n    \"review-report\": {\n      \"outputPath\": \"review-log.md\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\",\n      \"existingOutputPaths\": [\n        \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md\"\n      ]\n    },\n    \"architecture\": {\n      \"outputPath\": \"docs/architecture/**\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/architecture/**\",\n      \"existingOutputPaths\": []\n    },\n    \"docs\": {\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"resolvedOutputPath\": \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/{*.md,!(architecture)/**/*.md}\",\n      \"existingOutputPaths\": []\n    }\n  },\n  \"isComplete\": false,\n  \"applyRequires\": [\n    \"tasks\"\n  ],\n  \"nextSteps\": [\n    \"Run openspec instructions architecture --change \\\"add-hld-war-assessment\\\" --json before writing that artifact.\"\n  ],\n  \"actionContext\": {\n    \"mode\": \"repo-local\",\n    \"sourceOfTruth\": \"repo\",\n    \"planningArtifacts\": [\n      \"proposal\",\n      \"design\",\n      \"specs\",\n      \"tasks\",\n      \"architecture\",\n      \"docs\",\n      \"review-report\"\n    ],\n    \"linkedContext\": [],\n    \"allowedEditRoots\": [\n      \"/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha\"\n    ],\n    \"requiresAffectedAreaSelection\": false,\n    \"constraints\": [\n      \"Repo-local change artifacts and implementation edits are scoped to this project.\"\n    ]\n  },\n  \"artifacts\": [\n    {\n      \"id\": \"proposal\",\n      \"outputPath\": \"proposal.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"design\",\n      \"outputPath\": \"design.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"specs\",\n      \"outputPath\": \"specs/**/*.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"tasks\",\n      \"outputPath\": \"tasks.md\",\n      \"status\": \"done\"\n    },\n    {\n      \"id\": \"architecture\",\n      \"outputPath\": \"docs/architecture/**\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"docs\",\n      \"outputPath\": \"docs/{*.md,!(architecture)/**/*.md}\",\n      \"status\": \"ready\"\n    },\n    {\n      \"id\": \"review-report\",\n      \"outputPath\": \"review-log.md\",\n      \"status\": \"done\"\n    }\n  ]\n}\n","exitCode":0,"cancelled":false,"truncated":false}}
+--- RPC STDERR ---
+
+----- opsx-reminder -----
+-> 4 draft learning(s) awaiting promotion
+RPC_VALIDATION=PASS current PID handshake, cwd, session identity, and OpenSpec change/root
+RESTORED_GUARDED_RPC_VALIDATION=PASS
+[exit 0]
+
+$ printf 'PRIMARY_MEMORY_SENTINEL_5_1\n' > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/5.1-primary-sentinel.txt'; rm -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/trust.tsv' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/.5.1-trust-go'; (cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' && while test ! -e memory/.5.1-trust-go; do sleep 0.01; done; bun tools/trust.ts log shakedown-alpha-5-1 pass > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-alpha.out' 2>&1; echo $? > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-alpha.exit') & alpha_pid=$!; (cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' && while test ! -e memory/.5.1-trust-go; do sleep 0.01; done; bun tools/trust.ts log shakedown-beta-5-1 fail > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-beta.out' 2>&1; echo $? > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-beta.exit') & beta_pid=$!; printf 'TRUST_WRITER_PIDS alpha=%s beta=%s\n' "$alpha_pid" "$beta_pid"; touch '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/.5.1-trust-go'; wait "$alpha_pid"; wait "$beta_pid"; printf '%s\n' '--- alpha trust stdout+stderr ---'; cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-alpha.out'; printf 'alpha exit='; cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-alpha.exit'; printf '%s\n' '--- beta trust stdout+stderr ---'; cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-beta.out'; printf 'beta exit='; cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-beta.exit'; rm '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/.5.1-trust-go'; test "$(cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-alpha.exit')" = 0; test "$(cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/trust-beta.exit')" = 0; grep -Fx $'shakedown-alpha-5-1\t1\t1' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/trust.tsv'; grep -Fx $'shakedown-beta-5-1\t1\t0' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/trust.tsv'; test "$(find '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory' -maxdepth 1 \( -name '.trust.tsv.lock*' -o -name '.trust.tsv.*.tmp' \) -print | wc -l | tr -d ' ')" = 0; printf '%s\n' '--- final primary trust.tsv ---'; cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/trust.tsv'; printf 'TRUST_CONCURRENCY=PASS both rows persisted; lock/temp artifacts=0\n'
+TRUST_WRITER_PIDS alpha=73124 beta=73125
+--- alpha trust stdout+stderr ---
+shakedown-alpha-5-1: 1/1 -> watch
+alpha exit=0
+--- beta trust stdout+stderr ---
+shakedown-beta-5-1: 0/1 -> watch
+beta exit=0
+shakedown-alpha-5-1	1	1
+shakedown-beta-5-1	1	0
+--- final primary trust.tsv ---
+shakedown-alpha-5-1	1	1
+shakedown-beta-5-1	1	0
+TRUST_CONCURRENCY=PASS both rows persisted; lock/temp artifacts=0
+[exit 0]
+
+$ mkdir -p '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/probes' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/probes' && printf 'alpha-only\n' > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/probes/5.1-alpha-only.txt' && printf 'beta-only\n' > '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/probes/5.1-beta-only.txt' && test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/probes/5.1-alpha-only.txt' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-structurizr-diagram-option/probes/5.1-beta-only.txt' && test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/probes/5.1-beta-only.txt' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-hld-war-assessment/probes/5.1-alpha-only.txt' && printf 'ALPHA_OWN_PRESENT_OPPOSITE_ABSENT=PASS\nBETA_OWN_PRESENT_OPPOSITE_ABSENT=PASS\n'; printf '%s\n' '--- alpha status ---'; cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' && openspec status --change 'add-hld-war-assessment' --json; printf '%s\n' '--- beta status ---'; cd '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' && openspec status --change 'add-structurizr-diagram-option' --json
+ALPHA_OWN_PRESENT_OPPOSITE_ABSENT=PASS
+BETA_OWN_PRESENT_OPPOSITE_ABSENT=PASS
+--- alpha status ---
+{
+  "changeName": "add-hld-war-assessment",
+  "schemaName": "dev-reviewer",
+  "planningHome": {
+    "kind": "repo",
+    "root": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha",
+    "changesDir": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes",
+    "defaultSchema": "spec-driven"
+  },
+  "changeRoot": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment",
+  "artifactPaths": {
+    "proposal": {
+      "outputPath": "proposal.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/proposal.md"
+      ]
+    },
+    "specs": {
+      "outputPath": "specs/**/*.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/**/*.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/agent-path-scoping/spec.md",
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/hld-war-assessment/spec.md",
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/specs/war-lint/spec.md"
+      ]
+    },
+    "design": {
+      "outputPath": "design.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/design.md"
+      ]
+    },
+    "tasks": {
+      "outputPath": "tasks.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/tasks.md"
+      ]
+    },
+    "review-report": {
+      "outputPath": "review-log.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/review-log.md"
+      ]
+    },
+    "architecture": {
+      "outputPath": "docs/architecture/**",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/architecture/**",
+      "existingOutputPaths": []
+    },
+    "docs": {
+      "outputPath": "docs/{*.md,!(architecture)/**/*.md}",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/docs/{*.md,!(architecture)/**/*.md}",
+      "existingOutputPaths": []
+    }
+  },
+  "isComplete": false,
+  "applyRequires": [
+    "tasks"
+  ],
+  "nextSteps": [
+    "Run openspec instructions architecture --change \"add-hld-war-assessment\" --json before writing that artifact."
+  ],
+  "actionContext": {
+    "mode": "repo-local",
+    "sourceOfTruth": "repo",
+    "planningArtifacts": [
+      "proposal",
+      "design",
+      "specs",
+      "tasks",
+      "architecture",
+      "docs",
+      "review-report"
+    ],
+    "linkedContext": [],
+    "allowedEditRoots": [
+      "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha"
+    ],
+    "requiresAffectedAreaSelection": false,
+    "constraints": [
+      "Repo-local change artifacts and implementation edits are scoped to this project."
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "proposal",
+      "outputPath": "proposal.md",
+      "status": "done"
+    },
+    {
+      "id": "design",
+      "outputPath": "design.md",
+      "status": "done"
+    },
+    {
+      "id": "specs",
+      "outputPath": "specs/**/*.md",
+      "status": "done"
+    },
+    {
+      "id": "tasks",
+      "outputPath": "tasks.md",
+      "status": "done"
+    },
+    {
+      "id": "architecture",
+      "outputPath": "docs/architecture/**",
+      "status": "ready"
+    },
+    {
+      "id": "docs",
+      "outputPath": "docs/{*.md,!(architecture)/**/*.md}",
+      "status": "ready"
+    },
+    {
+      "id": "review-report",
+      "outputPath": "review-log.md",
+      "status": "done"
+    }
+  ]
+}
+--- beta status ---
+{
+  "changeName": "add-structurizr-diagram-option",
+  "schemaName": "dev-reviewer",
+  "planningHome": {
+    "kind": "repo",
+    "root": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta",
+    "changesDir": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes",
+    "defaultSchema": "spec-driven"
+  },
+  "changeRoot": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option",
+  "artifactPaths": {
+    "proposal": {
+      "outputPath": "proposal.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/proposal.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/proposal.md"
+      ]
+    },
+    "specs": {
+      "outputPath": "specs/**/*.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/specs/**/*.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/specs/structurizr-diagram-rendering/spec.md"
+      ]
+    },
+    "design": {
+      "outputPath": "design.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/design.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/design.md"
+      ]
+    },
+    "tasks": {
+      "outputPath": "tasks.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/tasks.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/tasks.md"
+      ]
+    },
+    "review-report": {
+      "outputPath": "review-log.md",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/review-log.md",
+      "existingOutputPaths": [
+        "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/review-log.md"
+      ]
+    },
+    "architecture": {
+      "outputPath": "docs/architecture/**",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/docs/architecture/**",
+      "existingOutputPaths": []
+    },
+    "docs": {
+      "outputPath": "docs/{*.md,!(architecture)/**/*.md}",
+      "resolvedOutputPath": "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/docs/{*.md,!(architecture)/**/*.md}",
+      "existingOutputPaths": []
+    }
+  },
+  "isComplete": false,
+  "applyRequires": [
+    "tasks"
+  ],
+  "nextSteps": [
+    "Run openspec instructions architecture --change \"add-structurizr-diagram-option\" --json before writing that artifact."
+  ],
+  "actionContext": {
+    "mode": "repo-local",
+    "sourceOfTruth": "repo",
+    "planningArtifacts": [
+      "proposal",
+      "design",
+      "specs",
+      "tasks",
+      "architecture",
+      "docs",
+      "review-report"
+    ],
+    "linkedContext": [],
+    "allowedEditRoots": [
+      "/private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta"
+    ],
+    "requiresAffectedAreaSelection": false,
+    "constraints": [
+      "Repo-local change artifacts and implementation edits are scoped to this project."
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "proposal",
+      "outputPath": "proposal.md",
+      "status": "done"
+    },
+    {
+      "id": "design",
+      "outputPath": "design.md",
+      "status": "done"
+    },
+    {
+      "id": "specs",
+      "outputPath": "specs/**/*.md",
+      "status": "done"
+    },
+    {
+      "id": "tasks",
+      "outputPath": "tasks.md",
+      "status": "done"
+    },
+    {
+      "id": "architecture",
+      "outputPath": "docs/architecture/**",
+      "status": "ready"
+    },
+    {
+      "id": "docs",
+      "outputPath": "docs/{*.md,!(architecture)/**/*.md}",
+      "status": "ready"
+    },
+    {
+      "id": "review-report",
+      "outputPath": "review-log.md",
+      "status": "done"
+    }
+  ]
+}
+[exit 0]
+
+$ printf '%s\n' '--- alpha untracked proof ---'; git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' status --short -- 'openspec/changes/add-hld-war-assessment'; printf '%s\n' '--- beta untracked proof ---'; git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' status --short -- 'openspec/changes/add-structurizr-diagram-option'; rm '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/probes/5.1-alpha-only.txt' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/probes/5.1-beta-only.txt'; rmdir '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha/openspec/changes/add-hld-war-assessment/probes' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta/openspec/changes/add-structurizr-diagram-option/probes'; test -z "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' status --porcelain)"; test -z "$(git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' status --porcelain)"; printf 'OPENSPEC_PROOFS_REMOVED_AND_WORKTREES_TRACKED_CLEAN=PASS\n'
+--- alpha untracked proof ---
+?? openspec/changes/add-hld-war-assessment/probes/
+--- beta untracked proof ---
+?? openspec/changes/add-structurizr-diagram-option/probes/
+OPENSPEC_PROOFS_REMOVED_AND_WORKTREES_TRACKED_CLEAN=PASS
+[exit 0]
+
+$ cd /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture && just worktree-rm alpha
+[exit 0]
+
+$ cd /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture && just worktree-rm beta
+[exit 0]
+
+$ test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' && test ! -e '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' && ! git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' worktree list --porcelain | grep -F -- '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--alpha' && ! git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' worktree list --porcelain | grep -F -- '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture--beta' && test -f '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/5.1-primary-sentinel.txt' && grep -Fx 'PRIMARY_MEMORY_SENTINEL_5_1' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/5.1-primary-sentinel.txt' && grep -Fx $'shakedown-alpha-5-1\t1\t1' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/trust.tsv' && grep -Fx $'shakedown-beta-5-1\t1\t0' '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture/memory/trust.tsv' && git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' cat-file -e "$(cat '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/object-commit.txt')^{commit}" && printf 'POST_REMOVE=PASS registrations absent; sibling dirs absent; primary memory sentinel/trust rows and object commit survive\n'; git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' worktree list --porcelain; git -C '/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture' rev-parse HEAD
+PRIMARY_MEMORY_SENTINEL_5_1
+shakedown-alpha-5-1	1	1
+shakedown-beta-5-1	1	0
+POST_REMOVE=PASS registrations absent; sibling dirs absent; primary memory sentinel/trust rows and object commit survive
+worktree /private/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/fixture
+HEAD 36f298fc01418b7993b1541589092c10936dba02
+branch refs/heads/master
+
+36f298fc01418b7993b1541589092c10936dba02
+[exit 0]
+
+UTC_END=20260802T201823Z
+LIVE_SHAKEDOWN_RESULT=PASS
+
+$ cmp current tasks.md with disposable fixture copy; cmp current review-log.md with disposable fixture copy; confirm task 5.1 remains unchecked
+- [ ] 5.1 Live shakedown, recorded in `shaKEDOWN.md`: create two worktrees via `just worktree`, run a
+TASK_AND_REVIEW_UNCHANGED_PENDING_REVIEW=PASS
+[exit 0]
+
+$ markdownlint-cli2 SHAKEDOWN.md
+markdownlint-cli2 v0.23.1 (markdownlint v0.41.1)
+Finding: SHAKEDOWN.md **/*.md !node_modules !.git !styles/Google/** !styles/write-good/** !openspec/changes/**/review-log.md
+Linting: 193 files
+Summary: 0 issues in 0 files
+[exit 0]
+
+$ vale SHAKEDOWN.md
+
+ [4mSHAKEDOWN.md[0m
+ 3:55    [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 6:46    [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 9:34    [34msuggestion[0m  Use semicolons judiciously.                                               Google.Semicolons   
+ 9:46    [33mwarning[0m     'be blocked' may be passive voice. Use active voice if you can.           write-good.Passive  
+ 9:46    [34msuggestion[0m  In general, use active voice instead of passive voice ('be blocked').     Google.Passive      
+ 9:46    [34msuggestion[0m  Try to avoid using 'be'.                                                  write-good.E-Prime  
+ 9:60    [33mwarning[0m     'It was' is too wordy.                                                    write-good.TooWordy 
+ 9:63    [34msuggestion[0m  Use 'wasn't' instead of 'was not'.                                        Google.Contractions 
+ 9:63    [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 10:1    [33mwarning[0m     'was written' may be passive voice. Use active voice if you can.          write-good.Passive  
+ 10:1    [34msuggestion[0m  In general, use active voice instead of passive voice ('was written').    Google.Passive      
+ 10:1    [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 12:41   [34msuggestion[0m  Use 'didn't' instead of 'did not'.                                        Google.Contractions 
+ 13:43   [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 14:48   [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 21:1    [34msuggestion[0m  Use parentheses judiciously.                                              Google.Parens       
+ 21:24   [34msuggestion[0m  Try to avoid using 'are'.                                                 write-good.E-Prime  
+ 21:24   [33mwarning[0m     'are logged' may be passive voice. Use active voice if you can.           write-good.Passive  
+ 21:24   [34msuggestion[0m  In general, use active voice instead of passive voice ('are logged').     Google.Passive      
+ 25:24   [33mwarning[0m     'exclusively' is too wordy.                                               write-good.TooWordy 
+ 26:43   [33mwarning[0m     Use 'regular expression' instead of 'regex'.                              Google.WordList     
+ 27:14   [33mwarning[0m     'are read' may be passive voice. Use active voice if you can.             write-good.Passive  
+ 27:14   [34msuggestion[0m  Try to avoid using 'are'.                                                 write-good.E-Prime  
+ 27:14   [34msuggestion[0m  In general, use active voice instead of passive voice ('are read').       Google.Passive      
+ 29:56   [33mwarning[0m     'is treated' may be passive voice. Use active voice if you can.           write-good.Passive  
+ 29:56   [34msuggestion[0m  In general, use active voice instead of passive voice ('is treated').     Google.Passive      
+ 32:75   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 32:75   [33mwarning[0m     'is malformed' may be passive voice. Use active voice if you can.         write-good.Passive  
+ 32:75   [34msuggestion[0m  In general, use active voice instead of passive voice ('is malformed').   Google.Passive      
+ 38:45   [34msuggestion[0m  Spell out 'STILL', if it's unfamiliar to the audience.                    Google.Acronyms     
+ 39:67   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 39:67   [34msuggestion[0m  In general, use active voice instead of passive voice ('is blocked').     Google.Passive      
+ 39:67   [33mwarning[0m     'is blocked' may be passive voice. Use active voice if you can.           write-good.Passive  
+ 41:53   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 50:55   [34msuggestion[0m  Use 'can't' instead of 'cannot'.                                          Google.Contractions 
+ 51:89   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 52:30   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 52:49   [34msuggestion[0m  Use semicolons judiciously.                                               Google.Semicolons   
+ 58:45   [34msuggestion[0m  Use parentheses judiciously.                                              Google.Parens       
+ 58:81   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 60:73   [33mwarning[0m     Use 'regular expression' instead of 'regex'.                              Google.WordList     
+ 61:49   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 62:3    [34msuggestion[0m  Use 'couldn't' instead of 'could not'.                                    Google.Contractions 
+ 62:13   [34msuggestion[0m  Try to avoid using 'be'.                                                  write-good.E-Prime  
+ 64:28   [34msuggestion[0m  Use parentheses judiciously.                                              Google.Parens       
+ 66:27   [34msuggestion[0m  Use 'isn't' instead of 'is not'.                                          Google.Contractions 
+ 68:14   [34msuggestion[0m  Try to avoid using 'is'.                                                  write-good.E-Prime  
+ 70:83   [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 72:60   [33mwarning[0m     Use 'regular expression' instead of 'regex'.                              Google.WordList     
+ 77:44   [34msuggestion[0m  In general, use active voice instead of passive voice ('was exercised').  Google.Passive      
+ 77:44   [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 77:44   [33mwarning[0m     'was exercised' may be passive voice. Use active voice if you can.        write-good.Passive  
+ 78:71   [33mwarning[0m     'was launched' may be passive voice. Use active voice if you can.         write-good.Passive  
+ 78:71   [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 78:71   [34msuggestion[0m  In general, use active voice instead of passive voice ('was launched').   Google.Passive      
+ 79:59   [34msuggestion[0m  Use 'didn't' instead of 'did not'.                                        Google.Contractions 
+ 81:1    [34msuggestion[0m  Use 'couldn't' instead of 'could not'.                                    Google.Contractions 
+ 81:11   [34msuggestion[0m  In general, use active voice instead of passive voice ('be delegated').   Google.Passive      
+ 81:11   [34msuggestion[0m  Try to avoid using 'be'.                                                  write-good.E-Prime  
+ 81:11   [33mwarning[0m     'be delegated' may be passive voice. Use active voice if you can.         write-good.Passive  
+ 86:72   [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 95:80   [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 96:49   [34msuggestion[0m  In general, use active voice instead of passive voice ('was run').        Google.Passive      
+ 96:49   [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 96:49   [33mwarning[0m     'was run' may be passive voice. Use active voice if you can.              write-good.Passive  
+ 107:61  [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 110:51  [34msuggestion[0m  Use 'couldn't' instead of 'could not'.                                    Google.Contractions 
+ 158:34  [33mwarning[0m     'were removed' may be passive voice. Use active voice if you can.         write-good.Passive  
+ 158:34  [34msuggestion[0m  In general, use active voice instead of passive voice ('were removed').   Google.Passive      
+ 158:34  [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 158:46  [34msuggestion[0m  Use semicolons judiciously.                                               Google.Semicolons   
+ 158:84  [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 165:1   [33mwarning[0m     'was blocked' may be passive voice. Use active voice if you can.          write-good.Passive  
+ 165:1   [34msuggestion[0m  In general, use active voice instead of passive voice ('was blocked').    Google.Passive      
+ 165:1   [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 177:12  [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 178:50  [34msuggestion[0m  Use 'didn't' instead of 'did not'.                                        Google.Contractions 
+ 185:18  [34msuggestion[0m  Use semicolons judiciously.                                               Google.Semicolons   
+ 187:68  [33mwarning[0m     'was required' may be passive voice. Use active voice if you can.         write-good.Passive  
+ 187:68  [34msuggestion[0m  In general, use active voice instead of passive voice ('was required').   Google.Passive      
+ 187:68  [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 194:19  [34msuggestion[0m  Spell out 'RPC', if it's unfamiliar to the audience.                      Google.Acronyms     
+ 195:21  [34msuggestion[0m  Spell out 'PID', if it's unfamiliar to the audience.                      Google.Acronyms     
+ 198:82  [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 202:66  [34msuggestion[0m  Spell out 'RPC', if it's unfamiliar to the audience.                      Google.Acronyms     
+ 203:24  [33mwarning[0m     Use 'command-line tool' instead of 'CLI'.                                 Google.WordList     
+ 207:52  [34msuggestion[0m  Try to avoid using 'was'.                                                 write-good.E-Prime  
+ 209:3   [33mwarning[0m     'were removed' may be passive voice. Use active voice if you can.         write-good.Passive  
+ 209:3   [34msuggestion[0m  In general, use active voice instead of passive voice ('were removed').   Google.Passive      
+ 209:3   [34msuggestion[0m  Try to avoid using 'were'.                                                write-good.E-Prime  
+ 215:12  [34msuggestion[0m  Spell out 'RPC', if it's unfamiliar to the audience.                      Google.Acronyms     
+
+✖ [31m0 errors[0m, [33m21 warnings[0m and [34m70 suggestions[0m in 1 file.
+[exit 0]
+
+$ cspell SHAKEDOWN.md --no-progress
+CSpell: Files checked: 1, Issues found: 0 in 0 files.
+[exit 0]
+
+$ bun test
+bun test v1.3.9 (cf6cdbbb)
+
+tools/architecture-html.test.ts:
+(pass) escapeHtml neutralises the five significant characters [2.30ms]
+(pass) renderInline: code span is literal and escaped
+(pass) renderInline: emphasis inside a code span stays literal
+(pass) renderInline: bold and italic
+(pass) renderInline: link with a relative href
+(pass) renderInline: a javascript href is neutralised to #
+(pass) renderMarkdown: ATX headings map to h1-h6 [0.53ms]
+(pass) renderMarkdown: a dash list becomes a ul [0.04ms]
+(pass) renderMarkdown: a numbered list becomes an ol
+(pass) renderMarkdown: adjacent ul and ol do not merge
+(pass) renderMarkdown: a wrapped list item joins its continuation lines
+(pass) renderMarkdown: a pipe table becomes a table with header and rows [0.22ms]
+(pass) renderMarkdown: prose becomes a paragraph with inline spans
+(pass) renderMarkdown: a table cell renders inline code
+(pass) render throws when the template lacks the model injection point [0.12ms]
+(pass) render throws when the template lacks the theme injection point
+(pass) buildModel reads the real tree: twelve sections, provenance, crosswalk [1.68ms]
+(pass) renderMarkdown: a mermaid fence becomes pre.mermaid
+(pass) renderMarkdown: a non-mermaid fence becomes an escaped code block
+
+tools/structurizr-source.test.ts:
+(pass) the exact regular model resolves [12.38ms]
+(pass) an omitted argument selects the canonical path
+(pass) only the opened file is mounted, never its parent [10.46ms]
+(pass) an absolute path is rejected [0.23ms]
+(pass) an alternate or traversing spelling is rejected
+(pass) an arbitrary other model in the repository is rejected
+(pass) a symlinked final component is rejected [10.44ms]
+(pass) a symlinked ancestor is rejected [9.97ms]
+(pass) a directory in place of the model is rejected [9.65ms]
+(pass) a FIFO in place of the model is rejected [13.23ms]
+(pass) a missing model is rejected [10.06ms]
+(pass) an oversized model is rejected [11.10ms]
+(pass) invalid UTF-8 is rejected [10.86ms]
+(pass) each permitted directive is accepted [0.04ms]
+(pass) every prohibited directive is rejected
+(pass) a true workspace extension is rejected
+(pass) quoted or commented extends text stays accepted [0.33ms]
+(pass) a prohibited directive in a real model fails before Docker [9.97ms]
+(pass) a real extending model fails before Docker [9.63ms]
+(pass) the source hash uses LF while the mounted bytes keep their line endings [10.17ms]
+(pass) lone CR normalizes to LF for hashing
+
+tools/structurizr-recipes.test.ts:
+(pass) Structurizr recipes live only in justfile.structurizr
+(pass) the recipe file declares exactly the public wrappers
+(pass) every recipe is a thin wrapper over a typed tool
+(pass) no safety logic is implemented in Just
+(pass) the model argument defaults to empty and is passed through unchanged
+(pass) the render wrapper rejects an arbitrary model through CONFIG MODEL_PATH [30.39ms]
+(pass) the clean wrapper rejects a stray model argument [20.85ms]
+(pass) exactly the three managed ignore entries are present [0.06ms]
+(pass) no broad build ignore is introduced [0.17ms]
+(pass) generated output paths are ignored and no generated file is tracked [21.13ms]
+(pass) existing Mermaid recipes and gates are untouched [0.02ms]
+
+tools/docs-lint-readonly.test.ts:
+(pass) reviewer docs-lint runs lychee without a checkout-mutating cache [0.10ms]
+(pass) the configured Vale vocabulary ships with the repository [0.16ms]
+
+tools/install-structurizr.test.ts:
+(pass) an ordinary install places no Structurizr item at all [544.06ms]
+(pass) an ordinary install performs no Docker or Bun probe and emits no warning [1070.94ms]
+(pass) an ordinary install leaves Mermaid behaviour unchanged [537.38ms]
+(pass) the opt-in places the exact inventory and seeds the model [686.38ms]
+(pass) the opt-in writes one import block and the three exact ignore rules [698.37ms]
+(pass) no test, fixture, or attestation workflow is copied to a consumer [694.84ms]
+(pass) a second opt-in preserves an edited model byte for byte [1378.95ms]
+(pass) a second opt-in deliberately refreshes kit-owned files [1390.49ms]
+(pass) a rerun keeps exactly one copy of each managed block [2062.54ms]
+(pass) an ordinary rerun into an opted-in repo neither refreshes nor removes the option [1216.98ms]
+(pass) removal is explicit, data-preserving, and idempotent [1857.37ms]
+(pass) removal refuses while generated state still exists [1226.82ms]
+(pass) the two Structurizr flags are mutually exclusive [15.68ms]
+(pass) the flags require an explicit project install [5.80ms]
+(pass) unrelated installed guards, schemas, and learnings are not changed [1232.55ms]
+
+tools/review-log-template.test.ts:
+(pass) a new dev-reviewer change resolves an orchestrator-owned fail-closed ledger template [2769.54ms]
+(pass) the standalone review-log template carries the same ledger protocol [0.23ms]
+
+tools/install-canary-upgrade.test.ts:
+(pass) guards install refuses a known stale canary byte-for-byte until the operator removes it [256.05ms]
+(pass) guards install refuses an unknown stale canary entry byte-for-byte [91.09ms]
+(pass) guards install refuses nested stale canary data byte-for-byte without traversal [92.04ms]
+(pass) guards install refuses a stale canary leaf symlink and preserves its external target [90.35ms]
+(pass) guards install refuses a local canary symlink and preserves its external directory [90.73ms]
+(pass) guards install refuses a wrong-type local canary byte-for-byte [89.74ms]
+(pass) guards install refuses a symlinked .pi parent and leaves its external sentinel untouched [91.96ms]
+(pass) guards install refuses a wrong-type .pi parent byte-for-byte [90.66ms]
+(pass) guards install refuses a symlinked .pi/extensions parent and leaves its external sentinel untouched [90.32ms]
+(pass) guards install refuses a wrong-type .pi/extensions parent byte-for-byte [89.34ms]
+(pass) guards install without a stale canary converges on repeat and remains canary-free [201.30ms]
+(pass) project install refuses a known stale canary byte-for-byte until the operator removes it [1070.98ms]
+(pass) project install refuses an unknown stale canary entry byte-for-byte [7.14ms]
+(pass) project install refuses nested stale canary data byte-for-byte without traversal [7.11ms]
+(pass) project install refuses a stale canary leaf symlink and preserves its external target [6.99ms]
+(pass) project install refuses a local canary symlink and preserves its external directory [6.82ms]
+(pass) project install refuses a wrong-type local canary byte-for-byte [7.34ms]
+(pass) project install refuses a symlinked .pi parent and leaves its external sentinel untouched [6.57ms]
+(pass) project install refuses a wrong-type .pi parent byte-for-byte [6.32ms]
+(pass) project install refuses a symlinked .pi/extensions parent and leaves its external sentinel untouched [7.02ms]
+(pass) project install refuses a wrong-type .pi/extensions parent byte-for-byte [7.04ms]
+(pass) project install without a stale canary converges on repeat and remains canary-free [1051.89ms]
+
+tools/docs-contracts.test.ts:
+(pass) retro reflection example is valid single-line JSON
+(pass) missing or malformed reflection examples fail
+(pass) ephemeral transcript references are rejected
+(pass) required close-out references resolve semantically [1.53ms]
+(pass) local reference extraction ignores external and fragment links
+(pass) session path contract distinguishes mandatory protocol from recorder input acceptance [0.36ms]
+(pass) session path contract rejects optional protocol wording
+(pass) session path contract rejects a mandatory assertion contradicted by relative loop input
+(pass) session path contract rejects recorder clauses that also permit relative loop input [0.82ms]
+(pass) session path contract rejects coordinated recorder negation followed by loop acceptance [0.04ms]
+(pass) session path permission matrix: not recorder but loop, active, and, recorder-first
+(pass) session path permission matrix: recorder but not loop, active, and, recorder-first
+(pass) session path permission matrix: neither, active, and, recorder-first
+(pass) session path permission matrix: both, active, and, recorder-first
+(pass) session path permission matrix: not recorder but loop, active, and, loop-first [0.28ms]
+(pass) session path permission matrix: recorder but not loop, active, and, loop-first [0.06ms]
+(pass) session path permission matrix: neither, active, and, loop-first [0.04ms]
+(pass) session path permission matrix: both, active, and, loop-first [0.02ms]
+(pass) session path permission matrix: not recorder but loop, active, but, recorder-first [0.03ms]
+(pass) session path permission matrix: recorder but not loop, active, but, recorder-first [0.05ms]
+(pass) session path permission matrix: neither, active, but, recorder-first [0.01ms]
+(pass) session path permission matrix: both, active, but, recorder-first
+(pass) session path permission matrix: not recorder but loop, active, but, loop-first
+(pass) session path permission matrix: recorder but not loop, active, but, loop-first
+(pass) session path permission matrix: neither, active, but, loop-first
+(pass) session path permission matrix: both, active, but, loop-first
+(pass) session path permission matrix: not recorder but loop, passive, and, recorder-first [0.20ms]
+(pass) session path permission matrix: recorder but not loop, passive, and, recorder-first
+(pass) session path permission matrix: neither, passive, and, recorder-first
+(pass) session path permission matrix: both, passive, and, recorder-first
+(pass) session path permission matrix: not recorder but loop, passive, and, loop-first
+(pass) session path permission matrix: recorder but not loop, passive, and, loop-first
+(pass) session path permission matrix: neither, passive, and, loop-first [0.19ms]
+(pass) session path permission matrix: both, passive, and, loop-first
+(pass) session path permission matrix: not recorder but loop, passive, but, recorder-first
+(pass) session path permission matrix: recorder but not loop, passive, but, recorder-first
+(pass) session path permission matrix: neither, passive, but, recorder-first
+(pass) session path permission matrix: both, passive, but, recorder-first
+(pass) session path permission matrix: not recorder but loop, passive, but, loop-first
+(pass) session path permission matrix: recorder but not loop, passive, but, loop-first
+(pass) session path permission matrix: neither, passive, but, loop-first
+(pass) session path permission matrix: both, passive, but, loop-first
+(pass) session path contract rejects cross-sentence relative permission outside the recorder boundary [1.07ms]
+(pass) session path contract allows recorder input and negative relative-path warnings in any order
+(pass) session path contract rejects optional or undiscriminated recorder wording
+(pass) repository documentation contracts are clean [4.71ms]
+(pass) project installer ships a runnable documentation-contract checker [544.31ms]
+
+tools/promote-guard.test.ts:
+(pass) RED reproducer: OpenSpec drops the body and two original scenarios for one new scenario [1348.95ms]
+(pass) partial MODIFIED refusal names every loss and leaves every main spec byte-identical [38.25ms]
+(pass) MODIFIED body omission is refused even when every main scenario is restated [24.32ms]
+(pass) full MODIFIED restatement passes [20.05ms]
+(pass) ADDED-only delta passes without inspecting main requirements [21.16ms]
+(pass) MODIFIED delta passes when its capability has no main spec [20.65ms]
+
+tools/archive-skills.test.ts:
+(pass) archive fallback retries only the sanctioned whole-change archive path [0.24ms]
+(pass) intelligent capability-scoped merge remains the guard-safe fallback
+(pass) installed pi archive and sync skills are identical to their cursor twins [0.26ms]
+
+tools/trust.test.ts:
+(pass) tierOf boundaries
+(pass) 10 runs at exactly 90% is queue, not watch
+(pass) parse and serialize round-trip
+(pass) applyLog accumulates
+(pass) applyLog flags a demotion crossing into watch [0.91ms]
+(pass) no demotion flag under 10 runs
+(pass) two synchronized trust CLIs through symlinked shared memory preserve distinct updates [490.95ms]
+(pass) two synchronized updates to one skill preserve both run and pass totals [465.92ms]
+(pass) a failed atomic trust replacement releases its lock and preserves the target [42.38ms]
+(pass) project installer ships a runnable trust CLI with its ledger utility [552.15ms]
+
+tools/structurizr-workflow.test.ts:
+(pass) the workflow triggers on pull request, push to main, and manual dispatch
+(pass) the model filter is the exact path with no includes glob [0.18ms]
+(pass) the filters cover tools, pin, recipes, installer, templates, and the workflow [0.02ms]
+(pass) the job runs on the canonical native runner
+(pass) only contents read is granted
+(pass) no write permission, secret, OIDC, package, or pull_request_target appears [0.03ms]
+(pass) every action is pinned to a commit
+(pass) checkout, setup-bun, and upload carry the specified commits
+(pass) checkout does not persist credentials
+(pass) setup-bun installs the pinned version
+(pass) Bun release URL, archive hash, executable hash, and version are checked
+(pass) the native engine is verified before any platform export
+(pass) the render subprocess starts from an empty environment with exactly six names [0.25ms]
+(pass) no GitHub value is forwarded into the render subprocess
+(pass) a seventh environment name would be a rejection fixture [0.02ms]
+(pass) upload runs only on success with the exact name and retention
+(pass) upload is the last step, after a single render
+(pass) no commit, push, emulation, or repeat-byte gate appears
+(pass) no cache or alternate runner is used
+
+tools/structurizr-fs.test.ts:
+(pass) the lock and owner records serialize in exact key order on one line [0.06ms]
+(pass) a malformed, extra-field, or mistyped lock is rejected [0.24ms]
+(pass) an owner marker whose nonce and name disagree is rejected [0.02ms]
+(pass) a non-canonical lock identity is rejected
+(pass) a render publishes atomically and leaves no stage or lock [1.60ms]
+(pass) different runs receive different nonces [0.73ms]
+(pass) lock contention is immediate, non-mutating, and creates no contender stage [1.34ms]
+(pass) competing processes serialize on the lock [197.37ms]
+(pass) a crash lock is never reclaimed automatically [0.78ms]
+(pass) a replaced lock object is not unlinked on release [0.77ms]
+(pass) only a matching nonce, marker, and live lock identity authorize deletion [1.89ms]
+(pass) a replaced owner marker retains the stage with IO CLEANUP [1.02ms]
+(pass) an abandoned stage is retained, never collected [1.05ms]
+(pass) an unsafe final root is retained untouched [0.80ms]
+(pass) a symlink, hard link, or special file in the tree is unsafe [0.53ms]
+(pass) safe stale output is removed before work, so failure leaves no stale success [2.24ms]
+(pass) ordinary failure leaves the final root absent and no owned stage [1.56ms]
+(pass) clean is idempotent and preserves an outside sentinel [2.37ms]
+(pass) clean with nothing to do succeeds [0.74ms]
+(pass) the three managed ignore entries are exact
+
+tools/audit-learnings.test.ts:
+(pass) active change provenance resolves [19.96ms]
+(pass) dated archive provenance resolves by original change name [19.11ms]
+(pass) archive suffix look-alikes do not resolve [19.24ms]
+(pass) path traversal cannot resolve outside the changes directory [19.21ms]
+(pass) non-sha commit provenance is rejected [18.78ms]
+
+tools/verify-goals.test.ts:
+(pass) parsePredicate extracts the shell command [0.23ms]
+(pass) isRetired detects the retired status
+(pass) verifyGoals passes a true predicate and violates a false one [5.74ms]
+(pass) verifyGoals skips retired goals and the template [0.37ms]
+(pass) cold start: no goals dir returns clean empty [0.01ms]
+(pass) two synchronized verify-goals processes keep lock-free shared-ledger rows intact [46.62ms]
+(pass) verify-goals source keeps the goal ledger on the plain append path [0.11ms]
+
+tools/structurizr-probe.test.ts:
+(pass) a healthy native engine passes every pinned stage in order [0.66ms]
+(pass) every image operation carries the explicit resolved platform [0.07ms]
+(pass) each container is hardened and uniquely named [0.17ms]
+(pass) the model is mounted read-only and the output mount is absent until export [0.13ms]
+(pass) every stage uses its exact pinned wall-clock bound [0.10ms]
+(pass) server architectures normalize to the pinned OCI vocabulary [0.04ms]
+(pass) Windows container mode is rejected
+(pass) a Darwin engine that is not Docker Desktop is rejected
+(pass) both Intel and Apple Silicon Docker Desktop are accepted [0.13ms]
+(pass) a conflicting DOCKER_DEFAULT_PLATFORM is rejected
+(pass) an agreeing DOCKER_DEFAULT_PLATFORM is accepted
+(pass) requesting a non-native target is rejected as emulation [0.08ms]
+(pass) an in-container platform mismatch is rejected
+(pass) the probe rejects an emulated in-container result end to end [0.17ms]
+(pass) docker info that is not JSON is DEPENDENCY DOCKER
+(pass) docker info missing required fields is DEPENDENCY DOCKER
+(pass) an unavailable Docker CLI is DEPENDENCY DOCKER
+(pass) an unavailable image is DEPENDENCY IMAGE
+(pass) image inspect that is not JSON is DEPENDENCY IMAGE
+(pass) a wrong repo digest, entrypoint, or image environment is rejected
+(pass) a version response that does not report the pinned versions is rejected
+(pass) a malformed version response fails the probe
+(pass) each stage maps to its exact primary code [0.58ms]
+(pass) an invalid model fails validation, not render [0.03ms]
+(pass) a failed JSON export is RENDER JSON and stops before SVG export [0.05ms]
+(pass) each simulated hang carries its stage timeout code
+(pass) a hung stage stops the sequence immediately [0.22ms]
+(pass) a real hung process is terminated at its bound and reported as timed out [1004.17ms]
+(pass) force-remove targets only an exact generated container name [0.31ms]
+(pass) generated container names are unique per run [1.24ms]
+
+tools/structurizr-render.test.ts:
+(pass) the precedence list is the frozen order [0.05ms]
+(pass) the primary code is extracted and ranked
+(pass) of two latent faults the earlier code wins [0.52ms]
+(pass) a successful render publishes and leaves no stage or lock [38.99ms]
+(pass) lock contention is reported before anything else [14.53ms]
+(pass) an invalid model path is CONFIG MODEL_PATH [11.35ms]
+(pass) a prohibited directive is CONFIG SOURCE_DIRECTIVE [10.38ms]
+(pass) a workspace extension is CONFIG WORKSPACE_EXTENDS [10.55ms]
+(pass) a wrong bun version is DEPENDENCY BUN_VERSION [11.17ms]
+(pass) an unavailable Docker is DEPENDENCY DOCKER [10.27ms]
+(pass) an unsupported platform is DEPENDENCY PLATFORM [10.24ms]
+(pass) an invalid model is VALIDATION DSL and a hang is VALIDATION TIMEOUT [22.98ms]
+(pass) export failures are RENDER JSON, RENDER SVG, and RENDER TIMEOUT [23.01ms]
+(pass) an unsafe SVG is CONSISTENCY SVG_SAFETY and nothing is published [13.54ms]
+(pass) lock contention beats a malformed pin and an unsafe output [11.09ms]
+(pass) an unsafe final root beats a bad render and stops before Docker [10.32ms]
+(pass) an invalid model path beats an unsupported platform [11.38ms]
+(pass) a source directive fault beats an absent Docker [10.62ms]
+(pass) every primary code in the taxonomy is reachable or explicitly out of band
+(pass) clean removes a published root and is idempotent [15.69ms]
+
+tools/session-cost.test.ts:
+(pass) sums realistic eligible main assistant records per model and overall [1.04ms]
+(pass) ignores non-main usage look-alikes and assistant tool requests as native candidates [0.17ms]
+(pass) accepts single and parallel native results exactly once [0.21ms]
+(pass) trims IDs, rejects duplicate native details before validation, and processes whitespace-only and absent IDs
+(pass) reports missing details, non-array results, and empty results as malformed processed containers [0.16ms]
+(pass) isolates malformed native children while accepting valid siblings
+(pass) malformed main values are isolated and numeric strings are not coerced [0.08ms]
+(pass) uses source-specific fallback labels and merges only exact trimmed explicit labels
+(pass) selects two legacy annotations as fallback without inventing calls or tokens
+(pass) native usage has session-wide precedence over valid legacy annotations
+(pass) collects legacy independently from a rejected duplicate and does not let its valid child activate native precedence
+(pass) reports malformed legacy independently while retaining valid native usage
+(pass) counts processed calls with no accepted native child when no legacy is selected
+(pass) rejects an overflowing main atomically and accepts a later independent main [0.60ms]
+(pass) rejects an overflowing native child atomically and accepts a later sibling [0.04ms]
+(pass) rejects an overflowing legacy annotation atomically and accepts a later annotation
+(pass) text and HTML share exact positive reason counts in canonical order
+(pass) HTML escapes every metacharacter in dynamic labels, filename, coverage, and reasons
+(pass) empty session is a complete zero total
+(pass) shipped recipe help describes valid persisted parent ToolResult usage
+
+tools/structurizr-template.test.ts:
+(pass) the template is exactly one regular file
+(pass) the template decodes as strict UTF-8
+(pass) the template uses hierarchical identifiers
+(pass) the template contains no prohibited source expansion
+(pass) the template does not extend another workspace [0.36ms]
+(pass) the template references no remote theme or external resource [0.05ms]
+(pass) the template relates a person directly to a component [0.02ms]
+(pass) the template declares exactly the three canonical view keys
+(pass) every declared view key is safe and free of a legend collision
+
+tools/record-verdict.test.ts:
+(pass) verbatim append preserves every reviewer-result byte [1.36ms]
+(pass) last-result selection chooses the latest of several subagent results [1.29ms]
+(pass) idempotent re-run keyed by toolCallId leaves the ledger byte-identical [0.71ms]
+(pass) absent toolCallId refusal leaves the ledger byte-identical [1.28ms]
+(pass) no-verdict-present refusal leaves the ledger byte-identical [0.80ms]
+(pass) malformed content refusal fails closed even for non-subagent tool results [1.83ms]
+(pass) prior entries are preserved byte-identically and the new entry is last [1.13ms]
+
+tools/evolution-timeline.test.ts:
+(pass) parseDelta reads the operation from each header, not a default
+(pass) parseTasks counts checked over total from the checkbox ledger
+(pass) section extracts a named proposal section body
+(pass) an all-added model computes the accretion thesis with zero retractions
+(pass) a modified-and-mostly-archived model is not described as accretion
+(pass) computeThesis never emits an empty headline or subhead
+(pass) render injects the model at the single injection point
+(pass) render throws when the template lacks the injection point
+(pass) render neutralises a script terminator hidden in model content
+
+tools/next-lifecycle.test.ts:
+(pass) in-progress next output requires session discovery and the two-argument loop form [323.32ms]
+(pass) completed next output directs retro before protected archival [291.59ms]
+(pass) every lifecycle protocol surface requires guarded archival with no stale raw path [1.02ms]
+
+tools/structurizr-verify.test.ts:
+(pass) JSON: the golden workspace parses to three canonical views [0.25ms]
+(pass) JSON: invalid JSON is rejected
+(pass) JSON: a non-object boundary type is rejected
+(pass) JSON: an empty or non-string id is rejected
+(pass) JSON: a view referencing an unknown element is rejected [1.24ms]
+(pass) JSON: a relationship to an unknown element is rejected [0.16ms]
+(pass) JSON: a workspace exporting no views is rejected [0.06ms]
+(pass) JSON: an oversized or non-UTF-8 workspace is rejected [1.59ms]
+(pass) JSON: a symlinked or hard-linked workspace export is rejected [2.85ms]
+(pass) lineage: the fixture shares an element and a relationship across all three views [0.29ms]
+(pass) lineage: a missing canonical view is rejected [0.15ms]
+(pass) lineage: views that share no element are rejected [0.04ms]
+(pass) lineage: an additional non-canonical view reconciles without failing
+(pass) view key: the canonical keys are accepted [0.21ms]
+(pass) view key: an unsafe key is rejected [0.05ms]
+(pass) view key: a 64-character key is the bound
+(pass) view key: a -key suffix is rejected in any case
+(pass) view key: duplicate and case-colliding keys are rejected [0.20ms]
+(pass) filename: each key maps to one primary and at most one legend [1.15ms]
+(pass) filename: a missing primary SVG is rejected [1.83ms]
+(pass) filename: an unexpected output file is rejected [1.80ms]
+(pass) filename: a legend with no matching view is rejected [1.94ms]
+(pass) filename: a symlinked or special output file is rejected [1.92ms]
+(pass) SVG safety: every pinned passive example is accepted byte for byte [3.17ms]
+(pass) SVG safety: every rejection fixture is refused [2.77ms]
+(pass) SVG safety: the observed passive forms stay permitted [0.12ms]
+(pass) SVG safety: structural limits are enforced [26.75ms]
+(pass) SVG safety: no external entity or resource is ever fetched [1.37ms]
+(pass) SVG safety: the vendored parser matches its pinned hashes
+(pass) manifest: serialization is exact for controlled bytes
+(pass) manifest: every published non-manifest file is recorded once [3.40ms]
+(pass) manifest: the recorded provenance is exactly the pinned provenance [2.35ms]
+(pass) manifest: an unsupported schema version is rejected
+(pass) manifest: volatile fields are rejected [2.52ms]
+(pass) manifest: an absolute path is rejected [1.64ms]
+(pass) manifest: file-set, size, and hash drift are each rejected [4.01ms]
+(pass) renderer metadata: two safe renders differing only in wall-clock text both pass [4.29ms]
+(pass) renderer metadata: serialization is deterministic for identical input [2.95ms]
+(pass) manifest: no byte-equality assertion is made across renders [0.18ms]
+
+tools/select-learnings.test.ts:
+(pass) glob ** spans path segments, * does not span slash [0.24ms]
+(pass) scope match selects the learning
+(pass) non-active status is filtered out (draft, retired)
+(pass) no false positive: unmatched scope is not selected
+(pass) cold start: no learnings returns clean empty
+(pass) rename: matches on the new path git reports
+(pass) cap bounds the result and trace records it [0.48ms]
+(pass) ordering: severity desc then created desc [0.05ms]
+(pass) parseFrontmatter reads nested source block and inline list [0.09ms]
+
+tools/assess-tool-events.test.ts:
+(pass) parseEvents tolerates blank, malformed, and invalid-shape lines [0.80ms]
+(pass) parseEvents excludes tagged synthetic tests by default and can include them explicitly [0.08ms]
+(pass) aggregateBlocked groups by guard+tool and ranks by count
+(pass) findRetries flags a tool input repeated >= min times
+(pass) findRetries below threshold returns nothing
+(pass) render reports clean when there is no signal
+(pass) render surfaces classes and retries
+
+tools/structurizr-docker.test.ts:
+(pass) every container is fresh, exactly named, and hardened [1.31ms]
+(pass) the four pinned command vectors are passed exactly [0.90ms]
+(pass) only the model and payload are mounted, and only payload is writable [1.05ms]
+(pass) the Docker socket, home, and credentials can never be mounted
+(pass) a writable mount other than payload is refused
+(pass) a read-write model mount is refused [0.18ms]
+(pass) environment is closed and never passed unvalued [0.92ms]
+(pass) a container name outside the generated shape is refused [0.02ms]
+(pass) workspace.json must exist before SVG export runs [0.22ms]
+(pass) unexpected non-SVG output after export is rejected [0.56ms]
+(pass) a malformed platform probe or version response is rejected [0.27ms]
+(pass) each stage maps to its exact code
+(pass) every stage carries its exact pinned bound [0.87ms]
+(pass) a hung stage force-removes only its own exact container [0.19ms]
+(pass) removal refuses a name outside the generated shape
+(pass) a real hung Docker process is terminated at its bound [1003.88ms]
+
+tools/structurizr-pin.test.ts:
+(pass) the shipped pin loads and freezes every recorded value [1.23ms]
+(pass) the loaded pin is frozen against mutation
+(pass) a malformed pin is rejected before Docker is queried [0.65ms]
+(pass) an additional field is rejected
+(pass) a missing field is rejected [2.08ms]
+(pass) a mistyped field is rejected [0.49ms]
+(pass) the latest tag is rejected as mutable
+(pass) a tag-only reference is rejected [0.53ms]
+(pass) the retired structurizr/cli distribution is rejected [0.10ms]
+(pass) the retired structurizr/lite distribution is rejected
+(pass) a reference that disagrees with repository, tag, or digest is rejected
+(pass) a non-digest platform manifest is rejected
+(pass) a third OCI target is rejected
+(pass) identical platform digests are rejected
+(pass) every command vector is frozen exactly [1.68ms]
+(pass) a non-hardened parser configuration is rejected [0.41ms]
+(pass) an unpinned or drifting Bun record is rejected
+(pass) upstream provenance must agree with the image tag [1.39ms]
+(pass) the pin records exactly the three reviewable evidence URLs
+(skip) all three evidence URLs resolve
+(pass) the fixture is one self-contained file with no source expansion
+(pass) the fixture relates one person directly to one component
+(pass) the fixture declares exactly the three canonical view keys
+
+tools/lib/ledger-lock.test.ts:
+(pass) real processes serialize without overlap and both whole-file actions persist [239.75ms]
+(pass) a live process remains owner beyond staleMs and the contender has a bounded timeout [490.25ms]
+(pass) an atomically published valid owner survives SIGKILL and is stale-broken [281.18ms]
+(pass) a SIGKILL before owner publication leaves an empty directory that later recovers [167.72ms]
+(pass) an abandoned fully published claim in an ownerless directory is reclaimed [167.06ms]
+(pass) an abandoned claim beside a valid dead owner is reclaimed through the same protocol [197.91ms]
+(pass) a breaker killed after replacing a claim leaves a reclaimable strict claim [289.94ms]
+(pass) a live owner survives cleanup of an abandoned dead claim [453.86ms]
+(pass) two real breakers claim one ownerless stale directory and then serialize [231.50ms]
+(pass) two breakers never quarantine a replacement across repeated dead-owner races [1669.12ms]
+(pass) an old release never removes a replacement lock [5.35ms]
+(pass) atomic replacement preserves mode and leaves no adjacent temp files [1.64ms]
+(pass) atomic-write failures preserve wrong-type and symlink targets and clean temp files [1.93ms]
+(pass) symlink and wrong-type lock paths fail loudly without touching their targets [2.14ms]
+(pass) symlinked memory directories resolve to one shared physical lock [54.39ms]
+(pass) owner symlinks are never followed or stale-broken [2.59ms]
+(pass) externally corrupted stale claim metadata fails loudly without deleting it [1.86ms]
+(pass) fresh corrupt owner metadata is not parsed, while stale corruption fails loudly [51.32ms]
+(pass) withLedgerLock rejects a native async callback before invocation [0.89ms]
+(pass) withLedgerLock rejects Promise and thenable results after release [7.71ms]
+(pass) withLedgerLock releases after callback errors and validates public options [4.37ms]
+
+extensions/developer-guard/index.test.ts:
+(pass) recursive force cleanup is blocked with a scoped non-force alternative [2.81ms]
+(pass) scoped non-force recursive cleanup remains allowed [0.91ms]
+(pass) other catastrophic commands remain blocked without misleading cleanup advice [0.67ms]
+
+extensions/learnings-inject/index.test.ts:
+(pass) injects selector output for the derived changed-file scope [105.93ms]
+(pass) reports a successful empty scope as cold-start clean-empty [97.58ms]
+(pass) reports unknown scope instead of a healthy empty selection [6.05ms]
+
+extensions/harness-selftest/index.test.ts:
+(pass) marker decisions follow the explicit 28-case depth and handshake matrix [7.99ms]
+(pass) bare marker-bearing top-level session halts and blocks with repair guidance [0.32ms]
+(pass) provisioned marker-bearing top-level session proceeds [0.17ms]
+(pass) directory without marker stays silent and non-blocking [0.29ms]
+(pass) valid child with inherited stale handshake stays silent with full tools [0.30ms]
+(pass) notification and shutdown failures are loud without disabling the tool block [0.34ms]
+
+extensions/force-delegate/index.test.ts:
+(pass) main bash allows just archive-change [0.59ms]
+(pass) main bash allows just record-verdict [0.27ms]
+(pass) main bash allows approved read-only just recipes [0.85ms]
+(pass) main bash allows documented tool-events flags [0.19ms]
+(pass) main bash blocks unsupported arguments on read-only just recipes [0.43ms]
+(pass) main bash blocks just deploy [0.43ms]
+(pass) main bash blocks bare just [0.39ms]
+(pass) main bash blocks redirection around an admitted recipe [0.36ms]
+(pass) main bash blocks --out on an admitted recipe [0.39ms]
+(pass) main bash blocks -o on an admitted recipe [0.47ms]
+(pass) main bash blocks --out= on an admitted recipe [0.42ms]
+(pass) main bash blocks inline environment assignment [0.32ms]
+(pass) main bash blocks an admitted recipe chained with rm [0.55ms]
+(pass) main bash blocks a backgrounded admitted recipe [0.32ms]
+(pass) main bash allows pipes inside double-quoted search patterns
+(pass) main bash allows pipes inside single-quoted search patterns [0.62ms]
+(pass) main bash blocks real pipelines [0.85ms]
+(pass) main bash blocks dangerous syntax even around quoted text [1.30ms]
+(pass) main bash blocks an unbalanced quote [0.34ms]
+(pass) main bash keeps direct write blocked [0.50ms]
+(pass) main bash keeps direct edit blocked [0.28ms]
+(pass) main bash keeps arbitrary mutation blocked [0.57ms]
+(pass) inherited synthetic telemetry environment cannot drop a real blocked event [0.36ms]
+(pass) depth and inherited handshake follow the explicit 28-case producer matrix [0.40ms]
+
+extensions/worktree-canary/index.test.ts:
+(pass) marker decisions follow the explicit 28-case depth and handshake matrix [8.94ms]
+(pass) bare marker-bearing top-level session halts and blocks with provisioning guidance [0.36ms]
+(pass) provisioned marker-bearing top-level session proceeds [0.22ms]
+(pass) directory without marker stays silent and non-blocking [0.30ms]
+(pass) valid child with inherited stale handshake stays silent with full tools [0.44ms]
+(pass) real pi 0.83 exits before first export or bash command can write [2750.32ms]
+
+########## HARNESS UNGUARDED -- force-delegate did not load in this top-level process. Stop now and return to the primary checkout. Provision a safe worktree with just worktree <name>. If this directory was created manually, remove it and recreate it through that recipe before restarting pi. ##########
+
+(pass) ExtensionRunner cancels halted user bash and preserves every pass-through boundary [258.41ms]
+(pass) notification and shutdown failures are loud without disabling the tool block [0.94ms]
+
+extensions/branch-guard/index.test.ts:
+(pass) protected-branch commit is blocked with explicit repository-context guidance [1.42ms]
+(pass) a chained directory change does not bypass protected-branch context [0.67ms]
+(pass) feature-branch commit remains allowed [0.30ms]
+(pass) explicit protected push remains blocked [0.65ms]
+
+extensions/lib/tool-events.test.ts:
+(pass) runtime logging writes a tagged runtime event [0.66ms]
+(pass) inherited synthetic environment cannot spoof or drop runtime logging [0.34ms]
+(pass) explicit synthetic test logger is tagged and isolated from runtime [0.56ms]
+(pass) two synchronized runtime writers keep complete lock-free appends in shared memory [97.66ms]
+(pass) tool-events source keeps runtime logging on plain append [0.40ms]
+(pass) logging failures remain fail-open [0.38ms]
+
+extensions/architect-scope/index.test.ts:
+(pass) architecture-writer can write inside docs architecture
+(pass) architecture-writer can write inside docs architecture with leading current directory
+(pass) architecture-writer can write inside docs architecture with absolute repo path
+(pass) architecture-writer is blocked from nested temp docs architecture [2.14ms]
+(pass) architecture-writer is blocked from template docs architecture [0.33ms]
+(pass) architecture-writer is blocked from docs decisions [0.53ms]
+(pass) architecture-writer is blocked from dot segment escape to decisions [0.30ms]
+(pass) architecture-writer is blocked from dot segment escape to code [0.52ms]
+(pass) architecture-writer is blocked from code [0.43ms]
+(pass) architecture-writer is blocked when target path is missing [0.40ms]
+(pass) developer resolution remains unrestricted
+(pass) tech-writer resolution remains unrestricted [0.41ms]
+(pass) reviewer resolution remains design artifact only [0.49ms]
+(pass) spec-reviewer resolution remains design artifact only [0.67ms]
+(pass) architecture-writer can write inside docs architecture under a symlinked repo root [0.22ms]
+(pass) solution-architect resolution remains design artifact only [0.69ms]
+(pass) unidentified resolution remains design artifact only [0.53ms]
+(pass) evolution-narrator can write thesis.json [0.34ms]
+(pass) evolution-narrator is blocked from the tool [0.32ms]
+(pass) evolution-narrator is blocked from design artifacts (no fall-through) [0.51ms]
+(pass) architecture-writer bash: read-only allowed [0.26ms]
+(pass) architecture-writer bash: just arch-lint allowed
+(pass) architecture-writer bash: just architecture-html allowed
+(pass) architecture-writer bash: sed -i outside scope blocked [0.86ms]
+(pass) architecture-writer bash: redirection blocked [0.29ms]
+(pass) architecture-writer bash: command substitution blocked [0.53ms]
+(pass) architecture-writer bash: bun on another tool blocked [0.38ms]
+(pass) architecture-writer bash: chained write blocked [0.36ms]
+(pass) developer bash: not gated by architect-scope [0.21ms]
+(pass) architecture-writer bash: --out redirect outside scope blocked [0.37ms]
+(pass) architecture-writer bash: -o redirect blocked [0.38ms]
+(pass) architecture-writer bash: render without --out still allowed [0.04ms]
+(pass) reviewer bash: git diff allowed [0.26ms]
+(pass) reviewer bash: read-only prefix followed by LF mutation blocked [0.45ms]
+(pass) reviewer bash: read-only prefix followed by CRLF mutation blocked [0.37ms]
+(pass) reviewer bash: bun test allowed [0.22ms]
+(pass) reviewer bash: just verify-gate allowed [0.20ms]
+(pass) reviewer bash: just probe-check allowed [0.08ms]
+(pass) reviewer bash: exact just docs-lint allowed [0.14ms]
+(pass) reviewer bash: docs-lint arguments and options blocked [0.73ms]
+(pass) reviewer bash: only byte-exact docs-lint spelling is admitted [1.31ms]
+(pass) reviewer bash: docs-lint chains, redirection, and env wrappers blocked [1.21ms]
+(pass) reviewer bash: tsc --noEmit allowed [0.05ms]
+(pass) reviewer bash: bare tsc blocked (could emit) [0.55ms]
+(pass) reviewer bash: just run-probe blocked (arbitrary bash -c) [0.25ms]
+(pass) reviewer bash: bun on an arbitrary script blocked [0.46ms]
+(pass) reviewer bash: rm blocked [0.42ms]
+(pass) reviewer bash: sed -i blocked [0.26ms]
+(pass) reviewer bash: redirection blocked [0.52ms]
+(pass) reviewer bash: command substitution blocked [0.24ms]
+(pass) reviewer bash: chained mutation blocked [0.49ms]
+(pass) reviewer bash: env injection blocked [0.28ms]
+(pass) reviewer bash: backgrounded mutation blocked [0.50ms]
+(pass) reviewer bash: block reason names the verifier contract [0.40ms]
+(pass) reviewer write resolution is unchanged by the bash grant [0.42ms]
+(pass) spec-reviewer bash: probe-check and exact docs-lint allowed, arbitrary blocked [0.88ms]
+(pass) spec-reviewer bash: read-only prefix followed by line-break mutation blocked [0.88ms]
+(pass) spec-reviewer bash: docs-lint mutation surfaces remain blocked [2.23ms]
+
+1 tests skipped:
+(skip) all three evidence URLs resolve
+
+ 533 pass
+ 1 skip
+ 0 fail
+ 2754 expect() calls
+Ran 534 tests across 36 files. [35.96s]
+[exit 0]
+
+$ openspec validate add-worktree-isolation --strict
+Change 'add-worktree-isolation' is valid
+[exit 0]
+
+$ just probe-check add-worktree-isolation
+probe-check: every task has a probe
+[exit 0]
+
+$ env PI_CODING_AGENT_DIR=/tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent just check-extensions
+check-extensions: included installed global canary: /tmp/pi-opsx-add-worktree-isolation-5.1-20260802T201809Z/pi-agent/extensions/worktree-canary/index.ts
+recipe-thinness: record-verdict clean -- contracted wrapper only
+recipe-thinness: archive-change clean -- contracted wrapper only
+check-extensions: clean -- no pi load-breakers; recipe-thinness assertions clean
+[exit 0]
+
+$ bun tools/check-doc-contracts.ts
+docs-contracts: clean
+[exit 0]
+
+$ just verify-gate
+-- tsc: no tsconfig.json, skipping --
+-- eslint: not installed, skipping --
+-- semgrep: not installed, skipping --
+verify-gate: PARTIAL -- 3 tool(s) not installed, NOT fully checked
+[exit 0]
+
+$ git diff --check -- SHAKEDOWN.md && bounded evidence-artifact contract-marker check
+EVIDENCE_ARTIFACT_CONTRACT_MARKERS=PASS
+[exit 0]
+
+$ bounded debt-marker check for changed log and evidence artifact
+DEBT_MARKER_CHECK=PASS
+[exit 0]
+
+VERIFICATION_RESULT=PASS

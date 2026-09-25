@@ -1,0 +1,6 @@
+{"type":"session","version":3,"id":"fixture-session"}
+{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"Delegating task 1.2."}]}}
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","toolCallId":"developer-001","content":[{"type":"text","text":"Implementation evidence only; no reviewer decision here."}]}}
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","toolCallId":"review-earlier-001","content":[{"type":"text","text":"FINDINGS:\n- Fixture predecessor finding.\n\nVERDICT: BLOCK"}]}}
+{"type":"message","message":{"role":"toolResult","toolName":"read","toolCallId":"read-001","content":[{"type":"text","text":"Unrelated tool result after the earlier review."}]}}
+{"type":"message","message":{"role":"toolResult","toolName":"subagent","toolCallId":"review-final-002","content":[{"type":"text","text":"FINDINGS (most severe first):\n- None.\n\n"},{"type":"text","text":"EVIDENCE CHECK: Yes — π & <raw> remain literal.\n\nVERDICT: PASS"}]}}

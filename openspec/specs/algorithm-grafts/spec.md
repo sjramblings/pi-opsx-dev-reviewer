@@ -6,7 +6,7 @@ TBD - created by archiving change add-algorithm-grafts. Update Purpose after arc
 
 ## Requirements
 
-### Requirement: Learnings carry a refutation core
+### Requirement: learnings carry a refutation core
 
 Every learning SHALL record `conjectured → refuted_by → learned → criterion_now`, and the
 template, README, and retro workflow SHALL specify it.
@@ -49,7 +49,7 @@ approach at commitment boundaries, and SHALL install it.
 ### Requirement: A propose-only meta-loop improves the harness itself
 
 `/opsx-retro` SHALL write a per-change reflection, and `/opsx-compost` SHALL mine reflections
-and the empirical signals and propose process/doctrine changes — propose-only, never applied
+and the empirical signals and propose process/doctrine changes—propose-only, never applied
 unattended.
 
 #### Scenario: Retro records a reflection

@@ -1,4 +1,4 @@
-# Documentation delta — {{change}}
+# Documentation delta—{{change}}
 
 Written by the `tech-writer` subagent. Covers every user-visible change in this change
 folder. Structured by Diátaxis (one mode per page), styled to pass `just docs-lint`,
