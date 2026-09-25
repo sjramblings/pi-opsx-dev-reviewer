@@ -150,6 +150,13 @@ architecture changed; and mechanical gates verify presence, evidence integrity, 
   pushing to them, and force-pushing to them, for <em>every</em> agent. The only way onto a protected branch becomes a
   reviewed pull request. Protected branches are configurable per project.</p>
 </div>
+<div class="card c-red">
+  <div><span class="badge b-red">fail closed</span></div>
+  <h3>Stuck agents stopped (repeat-call-detector)</h3>
+  <p>An agent in a loop re-runs one command with one input, often printing nothing new, so no output
+  watchdog fires. This counts identical consecutive tool calls per agent and blocks the eighth
+  (<code>OPSX_REPEAT_CALL_LIMIT</code>). Any different call resets the count.</p>
+</div>
 <div class="card c-amber">
   <div><span class="badge b-amber">review integrity</span></div>
   <h3>Cross-family review</h3>
@@ -259,9 +266,10 @@ boundaries structurally via pi&#39;s <code>tool_call</code> and <code>session_st
 <tr><td><code>worktree-canary</code></td><td><code>session_start</code></td><td>Global, marker-based halt for an unguarded top-level harness checkout; valid delegated children are exempt and retain full tools.</td></tr>
 <tr><td><code>developer-guard</code></td><td><code>tool_call</code></td><td>Blocks catastrophic bash (recursive rm, force-push, sudo, dd/mkfs, curl-pipe-shell, fork bomb) for every agent.</td></tr>
 <tr><td><code>branch-guard</code></td><td><code>tool_call</code></td><td>Enforces PR flow: blocks commit/push/force-push to protected branches (main/master) for every agent.</td></tr>
+<tr><td><code>repeat-call-detector</code></td><td><code>tool_call</code></td><td>Blocks the eighth identical consecutive tool call from any agent; a different call resets the streak.</td></tr>
 <tr><td><code>opsx-reminder</code></td><td><code>session_start</code></td><td>Pins the pending lifecycle actions (all-ticked un-archived change &rarr; <code>/opsx-retro</code>; draft learnings awaiting promotion) as a persistent <code>setWidget</code> panel above the editor + a <code>setStatus</code> footer badge, rendered in the active pi theme; clears itself when nothing pends.</td></tr>
 </table></div>
-<p class="sub">The four <code>tool_call</code> guards share <code>extensions/lib/tool-events.ts</code>: every
+<p class="sub">The five <code>tool_call</code> guards share <code>extensions/lib/tool-events.ts</code>: every
 <strong>blocked</strong> action is appended (best-effort, fail-open) to <code>memory/tool-events.jsonl</code>, which
 <code>just tool-events</code> mines into candidate learnings.</p>
 
@@ -275,6 +283,9 @@ false pass); the guards never skip.</p>
 <tr><td><code>just worktree-rm &lt;name&gt;</code></td><td>Safely remove that provisioned sibling without deleting primary memory or the shared Git object store.</td><td>Never</td></tr>
 <tr><td><code>just verify-gate</code></td><td>Deterministic pre-review pass: <code>tsc</code>/<code>eslint</code>/<code>semgrep</code>. The LLM reviewer only judges what a linter cannot.</td><td>Graceful</td></tr>
 <tr><td><code>just probe-check &lt;change&gt;</code></td><td>Every task in <code>tasks.md</code> must carry a <code>probe:</code> line (frozen before apply).</td><td>Never</td></tr>
+<tr><td><code>just diff-gate [--change &lt;change&gt;]</code></td><td>Fails on a test skip or focus marker the diff added, and on a ticked task that changed none of its declared source files. The reviewer runs it on every task.</td><td>Never</td></tr>
+<tr><td><code>just claim-scan</code></td><td>Fails on a version or size added to a doc that no other file contains, or a file path in backticks that does not exist. The tech-writer runs it before returning.</td><td>Never</td></tr>
+<tr><td><code>just pi-compat</code></td><td>Kit-only. Prints the last verified pi version next to the installed one, and fails if any other verified-against claim disagrees.</td><td>Never</td></tr>
 <tr><td><code>just run-probe &lt;change&gt; &lt;id&gt; &lt;cmd&gt;</code></td><td>Neutral executor: runs the probe, writes a sha256-attested transcript to the ledger.</td><td>Never</td></tr>
 <tr><td><code>just archive-change &lt;change&gt;</code></td><td>Sanctioned close-out: runs the ledger gate, promotion guard, OpenSpec archival, then lint normalisation for promoted specs.</td><td>Never</td></tr>
 <tr><td><code>just archive-check &lt;change&gt;</code></td><td>Internal ledger and architecture gate run by <code>archive-change</code>; not a separate close-out command.</td><td>Never</td></tr>
@@ -455,6 +466,7 @@ or shared Git object store.</p>
 <p>The loop renders a two-argument verdict command and runs it before the developer ticks the task:</p>
 <pre><code>just record-verdict "add-foo" "/Users/alice/.pi/agent/sessions/--work-repo--/session.jsonl"</code></pre>
 <p><code>record-verdict</code> reads the latest reviewer verdict from that parent-session JSONL and appends it byte-for-byte. The recorder itself accepts any readable path, including a relative path; the absolute persisted path is a loop-protocol requirement. A literal <code>&lt;session.jsonl&gt;</code> redirects shell input; do not use it as a placeholder. If <code>/session</code> reports <code>In-memory</code>, stop and use a persisted session.</p>
+<p><code>record-verdict</code> also bounds the fix loop. When a task collects its third <code>BLOCK</code> (<code>OPSX_MAX_BLOCK_ROUNDS</code>), it appends a <code>PARKED:</code> entry and exits 3, and <code>/opsx-loop</code> stops and hands the task to you instead of re-dispatching the developer.</p>
 <p>A partial <code>MODIFIED</code> requirement can drop existing body text or scenarios because OpenSpec replaces that requirement. The promotion guard refuses with <code>UNSAFE_PARTIAL_MODIFIED</code> before promotion and names the capability. Use the agent-driven intelligent merge for that capability only, restate the merged requirement completely in its delta, then retry <code>just archive-change &lt;change&gt;</code>. Do not change sibling capabilities or archive a directory yourself.</p>
 
 <h2 id="use">How to use</h2>

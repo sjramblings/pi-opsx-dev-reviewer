@@ -3,6 +3,12 @@
  *
  * Runs via bun; not a pi extension.
  *
+ * It also bounds the fix loop. After a BLOCK is recorded it counts that task's BLOCK entries;
+ * at OPSX_MAX_BLOCK_ROUNDS (default 3) it appends one PARKED entry and exits 3, so the
+ * orchestrator stops re-dispatching instead of looping forever against a reviewer that always
+ * finds something. The PARKED line never begins with VERDICT:, so ledger verdict counts are
+ * unchanged.
+ *
  * usage: bun tools/record-verdict.ts <change> <session.jsonl>
  */
 
@@ -13,10 +19,15 @@ type JsonRecord = Record<string, unknown>;
 type VerdictEntry = { text: string; toolCallId: string };
 
 export type RecordVerdictResult = {
-	status: "appended" | "already-recorded";
+	status: "appended" | "already-recorded" | "parked";
 	taskId: string;
 	toolCallId: string;
+	/** Present only when the task has at least one BLOCK entry. */
+	blockRounds?: number;
+	cap?: number;
 };
+
+export const DEFAULT_BLOCK_CAP = 3;
 
 export class RecordVerdictError extends Error {
 	constructor(
@@ -144,6 +155,45 @@ function recordedTaskId(ledger: string, marker: string): string {
 	return taskId;
 }
 
+export function blockCap(raw: string | undefined = process.env.OPSX_MAX_BLOCK_ROUNDS): number {
+	if (raw === undefined || raw === "") return DEFAULT_BLOCK_CAP;
+	if (!/^[1-9][0-9]*$/.test(raw)) {
+		return fail("INVALID_BLOCK_CAP", `OPSX_MAX_BLOCK_ROUNDS must be a positive integer, got "${raw}"`);
+	}
+	return Number(raw);
+}
+
+type TaskSection = { taskId: string; body: string };
+
+function taskSections(ledger: string): TaskSection[] {
+	const headings = [...ledger.matchAll(/^## Task (\d+(?:\.\d+)*)\b.*$/gm)];
+	return headings.map((heading, index) => {
+		const start = (heading.index ?? 0) + heading[0].length;
+		const end = headings[index + 1]?.index ?? ledger.length;
+		return { taskId: heading[1] ?? "", body: ledger.slice(start, end) };
+	});
+}
+
+/** Number of recorded BLOCK verdicts for a task, and whether it is already parked. */
+export function blockState(ledger: string, taskId: string): { rounds: number; parked: boolean } {
+	let rounds = 0;
+	let parked = false;
+	for (const section of taskSections(ledger)) {
+		if (section.taskId !== taskId) continue;
+		if (/^VERDICT:[ \t]*BLOCK\b/m.test(section.body)) rounds++;
+		if (/^PARKED:/m.test(section.body)) parked = true;
+	}
+	return { rounds, parked };
+}
+
+function parkedEntry(ledger: string, taskId: string, rounds: number, cap: number): string {
+	return (
+		`${appendSeparator(ledger)}## Task ${taskId}\n\n` +
+		`PARKED: task ${taskId} reached ${rounds} BLOCK round(s), the cap of ${cap}. ` +
+		"The loop stopped for operator review; do not re-dispatch the developer.\n"
+	);
+}
+
 function idMarker(toolCallId: string): string {
 	const encoded = Buffer.from(toolCallId, "utf8").toString("base64url");
 	return `<!-- record-verdict toolCallId-base64: ${encoded} -->`;
@@ -167,6 +217,7 @@ export function recordVerdict(
 	}
 
 	// Read and validate every input before opening the append-only ledger for writing.
+	const cap = blockCap();
 	const transcript = readText(sessionPath, "TRANSCRIPT_READ_FAILED");
 	const verdict = latestVerdict(transcript);
 	const changeDir = join(rootDir, "openspec", "changes", change);
@@ -175,10 +226,13 @@ export function recordVerdict(
 	const marker = idMarker(verdict.toolCallId);
 
 	if (ledger.includes(marker)) {
+		const taskId = recordedTaskId(ledger, marker);
+		const state = blockState(ledger, taskId);
 		return {
-			status: "already-recorded",
-			taskId: recordedTaskId(ledger, marker),
+			status: state.parked ? "parked" : "already-recorded",
+			taskId,
 			toolCallId: verdict.toolCallId,
+			...(state.rounds > 0 ? { blockRounds: state.rounds, cap } : {}),
 		};
 	}
 
@@ -191,7 +245,31 @@ export function recordVerdict(
 		const detail = error instanceof Error ? error.message : String(error);
 		return fail("LEDGER_APPEND_FAILED", `${ledgerPath}: ${detail}`);
 	}
-	return { status: "appended", taskId, toolCallId: verdict.toolCallId };
+
+	const updated = ledger + block;
+	const state = blockState(updated, taskId);
+	if (state.rounds === 0) return { status: "appended", taskId, toolCallId: verdict.toolCallId };
+	const latestIsBlock = /^VERDICT:[ \t]*BLOCK\b/m.test(verdict.text);
+	if (latestIsBlock && state.rounds >= cap) {
+		// Park once; every later BLOCK on a parked task reports parked again, so an orchestrator
+		// that ignored one stop signal still gets the next one.
+		if (!state.parked) {
+			try {
+				appendFileSync(ledgerPath, parkedEntry(updated, taskId, state.rounds, cap), "utf8");
+			} catch (error: unknown) {
+				const detail = error instanceof Error ? error.message : String(error);
+				return fail("LEDGER_APPEND_FAILED", `${ledgerPath}: ${detail}`);
+			}
+		}
+		return { status: "parked", taskId, toolCallId: verdict.toolCallId, blockRounds: state.rounds, cap };
+	}
+	return {
+		status: "appended",
+		taskId,
+		toolCallId: verdict.toolCallId,
+		blockRounds: state.rounds,
+		cap,
+	};
 }
 
 if (import.meta.main) {
@@ -202,7 +280,15 @@ if (import.meta.main) {
 	}
 	try {
 		const result = recordVerdict(args[0] ?? "", args[1] ?? "");
-		process.stdout.write(`record-verdict: ${result.status}: task ${result.taskId}\n`);
+		const rounds =
+			result.blockRounds === undefined ? "" : ` (BLOCK round ${result.blockRounds} of ${result.cap})`;
+		process.stdout.write(`record-verdict: ${result.status}: task ${result.taskId}${rounds}\n`);
+		if (result.status === "parked") {
+			process.stdout.write(
+				"record-verdict: the BLOCK cap is reached -- stop the loop and report this task to the operator.\n",
+			);
+			process.exit(3);
+		}
 	} catch (error: unknown) {
 		if (error instanceof RecordVerdictError) {
 			process.stderr.write(`record-verdict: ${error.reason}: ${error.message}\n`);
