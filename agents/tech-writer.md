@@ -55,6 +55,11 @@ emoji as list markers, hedging ("should work," "experts say"). State a measurabl
 Run the gate: `just docs-lint` (markdownlint + Vale + lychee + cspell, skipping any
 tool not installed). Fix until it is clean. Quote the actual output.
 
+Then run `just claim-scan`. It flags every version number or size you added that no other
+file in the repo contains, and every file path in backticks that does not exist. For each finding,
+either cite the file that backs the claim or remove the claim. Never invent a specific to
+make prose sound concrete. Fix until it is clean. Quote the actual output.
+
 ## Your final report (self-contained)
 
 ```text
@@ -63,6 +68,7 @@ CHANGE: <folder>
 FILES: <docs touched—one line why each>
 DIATAXIS MAP: <file → quadrant>
 GATE: <actual `just docs-lint` output>
+CLAIMS: <actual `just claim-scan` output>
 DRIFT CHECKED: <code facts verified by reading source, for example "CLI flags match src/cli.ts">
 FOR THE REVIEWER: <the 1–3 doc claims most worth checking against the code>
 ```

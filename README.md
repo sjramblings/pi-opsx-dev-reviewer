@@ -22,6 +22,7 @@ protection, agent, extension, and recipe, with usage — self-contained, opens s
 - [Use it — force `/opsx:apply` (per OpenSpec project)](#use-it--force-opsxapply-per-openspec-project)
 - [Run concurrent changes in worktrees](#run-concurrent-changes-in-worktrees)
 - [Close an OpenSpec change](#close-an-openspec-change)
+- [Executed-evidence gates](#executed-evidence-gates)
 - [Continual learning](#continual-learning-the-harness-gets-smarter-each-pass)
 - [Verify](#verify)
 - [Recommended environment](#recommended-environment)
@@ -46,7 +47,8 @@ pi-opsx-dev-reviewer/
 ├── prompts/                          # /opsx-loop · /opsx-review · /opsx-retro · /opsx-compost · /opsx-advise
 ├── tools/                            # deterministic bun engines (+ tests): select-learnings,
 │                                     #   audit-learnings, trust, verify-goals, session-cost,
-│                                     #   waf-grounding, arch-lint, pylib
+│                                     #   waf-grounding, arch-lint, pylib, diff-gate,
+│                                     #   claim-scan, pi-compat, record-verdict
 ├── learnings/                        # scoped, glob-targeted rules distilled from review (the read-path)
 ├── goals/                            # standing goals — finished work re-verified daily, forever
 ├── templates/                        # AGENTS.md + review-log.md starters for consuming repos
@@ -59,6 +61,7 @@ pi-opsx-dev-reviewer/
 ├── index.html                        # single-page visual guide to the whole harness
 ├── .harness-marker                   # tracked identity used by the global worktree canary
 ├── HARDENING_PLAN.md · SHAKEDOWN.md · docs/operating-risks.html   # risk map + hardening build
+├── docs/pi-compatibility.md          # the one "last verified against pi" version
 └── extensions/
     ├── lib/tool-events.ts            # shared: guards append every BLOCKED call to memory/tool-events.jsonl
     ├── force-delegate/index.ts       # ENFORCER — read-only main agent (write/edit blocked, bash allowlisted)
@@ -67,6 +70,7 @@ pi-opsx-dev-reviewer/
     ├── worktree-canary/index.ts      # global canary — catches bare or unprovisioned worktrees
     ├── developer-guard/index.ts      # damage-control on write-capable subagents (blocks catastrophic bash)
     ├── branch-guard/index.ts         # PR-flow enforcer — blocks commit/push/force-push to main/master
+    ├── repeat-call-detector/index.ts # blocks the 8th identical consecutive tool call (a stuck agent)
     └── opsx-reminder/index.ts        # session-start nudge — pins pending lifecycle actions as a themed widget + status badge
 ```
 
@@ -171,6 +175,8 @@ pi -p "Implement <X> with the developer agent, then have the reviewer agent
    it blocks committing on `main`/`master`, pushing to them, and force-pushing to them, for
    every agent, so the developer subagent (which keeps full bash) can never land code on a
    protected branch without a reviewed pull request. Edit its `PROTECTED` set per project.
+   `repeat-call-detector` blocks any agent that issues the same tool call with the same input
+   eight times in a row, the signature of a loop that prints nothing new.
    Now the main agent can only run read-only bash and must delegate every mutation;
    the `solution-architect` subagent is path-gated to design artifacts. `/opsx:apply`
    must delegate.
@@ -277,6 +283,26 @@ schema (`openspec/schemas/dev-reviewer/`), which bakes the delegation protocol i
 `openspec/config.yaml`). `openspec update` won't overwrite a project schema (it *does*
 regenerate — and would clobber — the generated `.pi/prompts/opsx-apply.md`, so never
 hand-edit that file).
+
+## Executed-evidence gates
+
+Each of these checks something an agent could otherwise just assert. All are deterministic, run
+without a model, and fail with the file and line that tripped them.
+
+| Gate | What it fails on | Who runs it |
+| --- | --- | --- |
+| BLOCK-round cap | A task that has collected three `BLOCK` verdicts. `record-verdict` appends a `PARKED:` entry and exits 3, and `/opsx-loop` stops for you instead of re-dispatching. Tune with `OPSX_MAX_BLOCK_ROUNDS`. | The orchestrator, through `just record-verdict` |
+| `just diff-gate` | A diff that adds a test skip or focus marker (`.skip(`, `.only(`, `#[ignore]`, and similar), and, with `--change <name>`, a ticked task that changed none of its declared source files. | The reviewer, on every task |
+| `just claim-scan` | A version number or size added to a doc that no other file in the repo contains, or a file path in backticks that does not exist. | The tech-writer, before returning |
+| `repeat-call-detector` | The eighth identical consecutive tool call from any agent. Tune with `OPSX_REPEAT_CALL_LIMIT`. | Every agent, as an extension |
+| `just pi-compat` | Any "verified against pi X" claim that disagrees with [docs/pi-compatibility.md](docs/pi-compatibility.md). It also prints your installed pi next to that line, without failing on a difference. | You, when you bump pi |
+
+`diff-gate` and `claim-scan` compare against the merge-base with `origin/main` by default;
+pass `--base <ref>` for a stacked branch. Both tools only read, and the reviewer may run them
+under two guards: the recipes hand arguments to the tool as positional parameters, so the
+shell never re-parses them, and `architect-scope` admits only plain ref-shaped arguments after
+any `just` recipe the reviewer runs. The ideas come from [pi-rukas](https://github.com/trail-openers/pi-rukas) (Apache-2.0); the
+decision record is [ADR 0006](docs/decisions/0006-port-pi-rukas-gates.md).
 
 ## Continual learning (the harness gets smarter each pass)
 
@@ -530,7 +556,9 @@ An ordinary install carries no Structurizr inventory and performs no Docker or B
   trigger it: regex literals (use `new RegExp("...")` instead), raw backticks, and
   apostrophes (even inside comments and double-quoted strings). `bun build`, `jiti`, and
   unit tests all miss this — only loading through `pi` catches it. Run `just check-extensions`
-  (a mechanical guard) before shipping any extension change.
+  (a mechanical guard) before shipping any extension change. The defect does not reproduce on
+  pi 0.83.0 (see [docs/pi-compatibility.md](docs/pi-compatibility.md)), but the guard stays
+  because the kit declares no minimum pi version.
 - **Extension package name**: neither extension imports a runtime package name, so loading
   is package-name-independent. If your editor type-checks, the local package may be
   `@earendil-works/pi-coding-agent` *or* `@mariozechner/pi-coding-agent`.

@@ -216,3 +216,30 @@ exit code, RPC JSON, persisted stderr halt, helper source, and shape assertions:
 `openspec/changes/add-worktree-isolation/probes/5.1-live-shakedown.txt` (SHA-256
 `72f428199fdd42dc9ddb7d364022e4ca442b7091b2edbd7b16f8861350182abb` after the operator home path was replaced with `~` on 2026-09-25 for
 publication; the transcript as captured hashed to `5ba0a03197b8827c85ca26bce429cca5d40cad518bc27087edc8956d4b134fea`).
+
+## pi 0.83.0 loader probe—2026-09-24
+
+Purpose: check whether the 0.79.9 load-breaker defect still reproduces, and prove the new
+`repeat-call-detector` and the edited `architect-scope` load through pi itself, not only under
+`bun test`. The probe imports pi's own `loadExtensions` from the installed package
+(the core extensions loader inside the globally installed `@earendil-works/pi-coding-agent`, pi
+`--version` 0.83.0) and loads each file with no model and no network.
+
+Probe file, containing both 0.79.9 load-breakers (a regex literal and an apostrophe):
+
+```text
+export default function (pi) { const r = /x/; pi.on("tool_call", async () => undefined); } // it's
+```
+
+Outcomes:
+
+- The probe file: `errors: []`, one `tool_call` handler registered. The defect does not
+  reproduce on 0.83.0.
+- `extensions/repeat-call-detector/index.ts`: `errors: []`, one handler; with
+  `OPSX_REPEAT_CALL_LIMIT=3`, three identical `bash` calls returned `[false,false,true]`
+  (the third blocked).
+- `extensions/architect-scope/index.ts` after the argument-hardening edit: `errors: []`, one
+  handler.
+
+The load-breaker rules in `just check-extensions` stay, because the kit declares no minimum pi
+version.

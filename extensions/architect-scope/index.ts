@@ -212,6 +212,7 @@ const BASH_REASON =
 const VERIFIER_BASH_REASON =
 	"architect-scope: a read-only verifier may run read-only shell plus the deterministic " +
 	"verification gates only (bun test, just verify-gate, just probe-check, just docs-lint, " +
+	"just diff-gate, just claim-scan, " +
 	"tsc --noEmit). It " +
 	"holds no write tool and must never execute an arbitrary command.";
 
@@ -250,7 +251,7 @@ const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 		"reviewer",
 		new Map<string, Set<string>>([
 			["bun", new Set(["test"])],
-			["just", new Set(["verify-gate", "probe-check", "docs-lint"])],
+			["just", new Set(["verify-gate", "probe-check", "docs-lint", "diff-gate", "claim-scan"])],
 			["tsc", new Set(["--noEmit"])],
 		]),
 	],
@@ -261,6 +262,36 @@ const SCOPED_BASH_WRITERS = new Map<string, Map<string, Set<string>>>([
 		]),
 	],
 ]);
+
+// just re-parses recipe arguments: a recipe that interpolates them into its shell body turns an
+// escaped payload (backslash-escaped or ANSI-C quoted) into live command substitution, which the
+// literal BASH_DANGEROUS check above cannot see. So every argument after an allowed just recipe
+// must be a plain ref-shaped token, and a recipe that takes no parameters must get none -- extra
+// tokens make just run them as further recipes (verify-gate run-probe ... reached bash -c).
+// Arity matters as much as content: surplus arguments after a fixed-arity recipe are read by just
+// as further recipe names, so probe-check x run-probe ... would reach bash -c with safe tokens.
+// Only a variadic recipe (its last parameter takes every remaining argument) may take more.
+const JUST_SAFE_ARG = new RegExp("^[A-Za-z0-9._/@^~-]+$");
+const JUST_MAX_ARGS = new Map<string, number>([
+	["verify-gate", 0],
+	["docs-lint", 0],
+	["arch-lint", 0],
+	["probe-check", 1],
+	["architecture-html", 1],
+]);
+const JUST_VARIADIC_RECIPES = new Set(["diff-gate", "claim-scan"]);
+const JUST_FLAG_ARGS = new Set(["--base", "--change"]);
+
+function justArgsSafe(recipe: string, args: string[]): boolean {
+	if (!JUST_VARIADIC_RECIPES.has(recipe) && args.length > (JUST_MAX_ARGS.get(recipe) ?? 0)) {
+		return false;
+	}
+	for (const arg of args) {
+		if (!JUST_SAFE_ARG.test(arg)) return false;
+		if (arg.indexOf("-") === 0 && !JUST_FLAG_ARGS.has(arg)) return false;
+	}
+	return true;
+}
 
 function scopedBashAllowed(agent: string, command: string): boolean {
 	if (typeof command !== "string" || command.trim() === "") return false;
@@ -283,6 +314,7 @@ function scopedBashAllowed(agent: string, command: string): boolean {
 			if (cmd === "just" && tokens[1] === "docs-lint" && command !== "just docs-lint") {
 				return false;
 			}
+			if (cmd === "just" && !justArgsSafe(tokens[1], tokens.slice(2))) return false;
 			// The command is an allowed writer, but its output must not be redirected outside
 			// scope. Block any output-destination flag: bun tools/architecture-html.ts --out
 			// <path> writes wherever --out points, which would escape the path gate.

@@ -212,3 +212,153 @@ test("prior entries are preserved byte-identically and the new entry is last", (
 		{ ledger: priorLedger },
 	);
 });
+
+// Fix-loop cap: count BLOCK rounds per task, park at the cap.
+
+function reviewerResult(toolCallId: string, verdict: "PASS" | "BLOCK"): string {
+	return `${JSON.stringify({
+		type: "message",
+		message: {
+			role: "toolResult",
+			toolName: "subagent",
+			toolCallId,
+			content: [{ type: "text", text: `FINDINGS:\n- P1 finding.\n\nVERDICT: ${verdict}` }],
+		},
+	})}\n`;
+}
+
+function withCap<T>(value: string | undefined, run: () => T): T {
+	const original = process.env.OPSX_MAX_BLOCK_ROUNDS;
+	if (value === undefined) delete process.env.OPSX_MAX_BLOCK_ROUNDS;
+	else process.env.OPSX_MAX_BLOCK_ROUNDS = value;
+	try {
+		return run();
+	} finally {
+		if (original === undefined) delete process.env.OPSX_MAX_BLOCK_ROUNDS;
+		else process.env.OPSX_MAX_BLOCK_ROUNDS = original;
+	}
+}
+
+function recordBlocks(workspace: Workspace, count: number): RecordVerdictResult[] {
+	const results: RecordVerdictResult[] = [];
+	for (let round = 1; round <= count; round++) {
+		writeFileSync(workspace.sessionPath, reviewerResult(`review-block-${round}`, "BLOCK"), "utf8");
+		results.push(invoke(workspace));
+	}
+	return results;
+}
+
+test("a BLOCK under the cap is appended with its round count", () => {
+	withCap(undefined, () =>
+		withWorkspace((workspace) => {
+			const [first] = recordBlocks(workspace, 1);
+			expect(first).toEqual({
+				status: "appended",
+				taskId: "1.2",
+				toolCallId: "review-block-1",
+				blockRounds: 1,
+				cap: 3,
+			});
+			expect(readFileSync(workspace.ledgerPath, "utf8")).not.toContain("PARKED:");
+		}),
+	);
+});
+
+test("the third BLOCK parks the task once, after the verdict entry", () => {
+	withCap(undefined, () =>
+		withWorkspace((workspace) => {
+			const results = recordBlocks(workspace, 3);
+			expect(results.map((r) => r.status)).toEqual(["appended", "appended", "parked"]);
+			const ledger = readFileSync(workspace.ledgerPath, "utf8");
+			expect(ledger.match(/^PARKED:/gm)).toHaveLength(1);
+			expect(ledger.match(/^VERDICT: BLOCK$/gm)).toHaveLength(3);
+			expect(ledger.lastIndexOf("PARKED:")).toBeGreaterThan(ledger.lastIndexOf("VERDICT: BLOCK"));
+			expect(ledger).toContain("PARKED: task 1.2 reached 3 BLOCK round(s), the cap of 3.");
+		}),
+	);
+});
+
+test("re-running a parked verdict reports parked without writing", () => {
+	withCap(undefined, () =>
+		withWorkspace((workspace) => {
+			recordBlocks(workspace, 3);
+			const before = readFileSync(workspace.ledgerPath);
+			const again = invoke(workspace);
+			expect(again.status).toBe("parked");
+			expect(readFileSync(workspace.ledgerPath)).toEqual(before);
+		}),
+	);
+});
+
+test("PARKED entries never begin with VERDICT:", () => {
+	withCap("1", () =>
+		withWorkspace((workspace) => {
+			recordBlocks(workspace, 1);
+			const ledger = readFileSync(workspace.ledgerPath, "utf8");
+			const parkedSection = ledger.slice(ledger.lastIndexOf("## Task"));
+			expect(parkedSection).toContain("PARKED:");
+			expect(parkedSection).not.toMatch(/^VERDICT:/m);
+			expect(ledger.match(/^VERDICT:/gm)).toHaveLength(1);
+		}),
+	);
+});
+
+test("the cap is configurable", () => {
+	withCap("2", () =>
+		withWorkspace((workspace) => {
+			expect(recordBlocks(workspace, 2).map((r) => r.status)).toEqual(["appended", "parked"]);
+		}),
+	);
+});
+
+test("an invalid cap fails closed before appending", () => {
+	for (const bad of ["0", "-1", "three", "2.5"]) {
+		withCap(bad, () =>
+			withWorkspace((workspace) => {
+				const before = readFileSync(workspace.ledgerPath);
+				expectRefusal(workspace, "INVALID_BLOCK_CAP");
+				expect(readFileSync(workspace.ledgerPath)).toEqual(before);
+			}),
+		);
+	}
+});
+
+test("BLOCK rounds are counted per task", () => {
+	const ledger = "# Review log\n\n## Task 1.1\n\nVERDICT: BLOCK\n\n## Task 1.1\n\nVERDICT: BLOCK\n";
+	withCap(undefined, () =>
+		withWorkspace(
+			(workspace) => {
+				const [result] = recordBlocks(workspace, 1);
+				expect(result?.status).toBe("appended");
+				expect(result?.blockRounds).toBe(1);
+			},
+			{ ledger },
+		),
+	);
+});
+
+test("CLI exits 3 and says stop when a task parks", () => {
+	withCap("1", () =>
+		withWorkspace((workspace) => {
+			writeFileSync(workspace.sessionPath, reviewerResult("review-cli-1", "BLOCK"), "utf8");
+			const run = Bun.spawnSync(
+				["bun", join(import.meta.dir, "record-verdict.ts"), change, workspace.sessionPath],
+				{ cwd: workspace.root, env: { ...process.env, OPSX_MAX_BLOCK_ROUNDS: "1" } },
+			);
+			expect(run.exitCode).toBe(3);
+			expect(run.stdout.toString()).toContain("record-verdict: parked: task 1.2 (BLOCK round 1 of 1)");
+			expect(run.stdout.toString()).toContain("stop the loop");
+		}),
+	);
+});
+
+test("a BLOCK recorded after the task parked reports parked again without a second PARKED entry", () => {
+	withCap(undefined, () =>
+		withWorkspace((workspace) => {
+			const results = recordBlocks(workspace, 4);
+			expect(results.map((r) => r.status)).toEqual(["appended", "appended", "parked", "parked"]);
+			expect(results[3]?.blockRounds).toBe(4);
+			expect(readFileSync(workspace.ledgerPath, "utf8").match(/^PARKED:/gm)).toHaveLength(1);
+		}),
+	);
+});
